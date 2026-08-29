@@ -1,0 +1,39 @@
+{
+  "name": "@adze/retrieval",
+  "version": "0.0.1",
+  "description": "Local-first hybrid code retrieval: ripgrep, tree-sitter symbols, structure-aware chunking, reciprocal-rank fusion. No network calls.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@vscode/ripgrep": "catalog:",
+    "picomatch": "catalog:",
+    "web-tree-sitter": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
