@@ -1,0 +1,25 @@
+{
+  "nameShort": "Adze",
+  "extensionsGallery": {
+    "serviceUrl": "https://gallery.example.invalid/vscode/gallery"
+  },
+  "extensionRecommendations": {
+    "biomejs.biome": { "onFileOpen": [{ "pathGlob": "**/biome.json" }] },
+    "ms-python.python": { "onFileOpen": [{ "pathGlob": "**/*.py" }] }
+  },
+  "keymapExtensionTips": ["vscodevim.vim"],
+  "remoteExtensionTips": {
+    "ssh-remote": {
+      "friendlyName": "SSH",
+      "extensionId": "ms-vscode-remote.remote-ssh"
+    }
+  },
+  "exeBasedExtensionTips": {
+    "dotnet": {
+      "friendlyName": ".NET",
+      "recommendations": {
+        "ms-dotnettools.csdevkit": { "important": true }
+      }
+    }
+  }
+}

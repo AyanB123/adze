@@ -1,0 +1,20 @@
+{
+  "nameShort": "Adze",
+  "extensionsGallery": {
+    "serviceUrl": "https://gallery.example.invalid/vscode/gallery",
+    "itemUrl": "https://gallery.example.invalid/vscode/item"
+  },
+  "extensionRecommendations": {
+    "biomejs.biome": {
+      "onFileOpen": [{ "pathGlob": "**/biome.json" }]
+    }
+  },
+  "keymapExtensionTips": ["vscodevim.vim"],
+  "languageExtensionTips": ["editorconfig.editorconfig"],
+  "configBasedExtensionTips": {
+    "prettier": {
+      "configPath": ".prettierrc",
+      "recommendations": { "esbenp.prettier-vscode": { "name": "Prettier" } }
+    }
+  }
+}
