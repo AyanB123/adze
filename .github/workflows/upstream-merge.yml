@@ -92,7 +92,7 @@ jobs:
     outputs:
       active: ${{ steps.check.outputs.active }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: check for a fork target
         id: check
@@ -127,7 +127,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           # Full history: a merge base cannot be computed from a shallow clone.
           fetch-depth: 0
@@ -136,7 +136,7 @@ jobs:
       # every run re-asks a human the same question about the same appended
       # import line, which is the exact toil this workflow exists to remove.
       - name: restore rerere cache
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .git/rr-cache
           key: rerere-${{ github.run_id }}
@@ -265,7 +265,7 @@ jobs:
 
       - name: persist rerere cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: .git/rr-cache
           key: rerere-${{ github.run_id }}
