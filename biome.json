@@ -13,7 +13,8 @@
       "!**/.turbo",
       "!apps/ide/vscode",
       "!bench/.runs",
-      "!**/*.generated.ts"
+      "!**/*.generated.ts",
+      "!**/src/generated"
     ]
   },
   "formatter": {

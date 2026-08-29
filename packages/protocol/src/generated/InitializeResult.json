@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "protocolVersion": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+$"
+    },
+    "engine": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "platform": {
+          "type": "string",
+          "minLength": 1
+        }
+      },
+      "required": [
+        "name",
+        "version"
+      ],
+      "additionalProperties": false
+    },
+    "capabilities": {
+      "type": "object",
+      "properties": {
+        "turns": {
+          "type": "boolean"
+        },
+        "edits": {
+          "type": "boolean"
+        },
+        "retrieval": {
+          "type": "boolean"
+        },
+        "nativeToolCalling": {
+          "type": "boolean"
+        },
+        "vision": {
+          "type": "boolean"
+        },
+        "mcpClient": {
+          "type": "boolean"
+        },
+        "mcpServer": {
+          "type": "boolean"
+        },
+        "osSandbox": {
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "turns",
+        "edits",
+        "retrieval",
+        "nativeToolCalling",
+        "vision",
+        "mcpClient",
+        "mcpServer",
+        "osSandbox"
+      ],
+      "additionalProperties": false
+    },
+    "warnings": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "no-os-sandbox",
+              "degraded-provider",
+              "validator-downgraded",
+              "network-unrestricted"
+            ]
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reference": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "protocolVersion",
+    "engine",
+    "capabilities"
+  ],
+  "additionalProperties": false
+}

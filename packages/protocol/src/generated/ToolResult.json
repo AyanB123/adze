@@ -1,0 +1,110 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "properties": {
+    "callId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "content": {
+      "type": "array",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "text"
+              },
+              "name": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "const": "image"
+              },
+              "name": {
+                "type": "string"
+              },
+              "mediaType": {
+                "type": "string",
+                "enum": [
+                  "image/png",
+                  "image/jpeg",
+                  "image/gif",
+                  "image/webp"
+                ]
+              },
+              "data": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "type",
+              "mediaType",
+              "data"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "truncated": {
+      "type": "boolean"
+    },
+    "truncation": {
+      "type": "object",
+      "properties": {
+        "originalBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "returnedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "continuation": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "originalBytes",
+        "returnedBytes"
+      ],
+      "additionalProperties": false
+    },
+    "durationMs": {
+      "type": "number",
+      "minimum": 0
+    },
+    "error": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "callId",
+    "ok",
+    "content",
+    "truncated"
+  ],
+  "additionalProperties": false
+}
