@@ -1,0 +1,36 @@
+# Normalize text files in the repo, but never touch things that must stay byte-exact.
+* text=auto eol=lf
+
+# Patch series for the IDE fork MUST NOT be normalized. CRLF-mangled patches
+# fail `git apply` with "patch does not apply", which is the single most common
+# cause of a Windows-only fork build failure.
+*.patch  -text
+*.diff   -text
+
+# Shell scripts must stay LF even when checked out on Windows (Git Bash / WSL2
+# execute them during the Code-OSS build).
+*.sh     text eol=lf
+*.bash   text eol=lf
+
+# Windows-only scripts stay CRLF.
+*.ps1    text eol=crlf
+*.cmd    text eol=crlf
+*.bat    text eol=crlf
+
+# Binary assets.
+*.png binary
+*.jpg binary
+*.ico binary
+*.icns binary
+*.vsix binary
+*.wasm binary
+*.node binary
+*.zip binary
+
+# Generated files: collapse in diffs and exclude from language stats.
+pnpm-lock.yaml      -diff linguist-generated
+packages/protocol/src/generated/** linguist-generated
+
+# Snapshot fixtures should not be reformatted.
+**/__snapshots__/** -text -diff
+bench/reports/**/trajectories/** -diff linguist-generated

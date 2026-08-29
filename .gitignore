@@ -1,0 +1,49 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+out/
+build/
+*.tsbuildinfo
+.turbo/
+
+# Test / coverage
+coverage/
+.vitest/
+
+# Editors
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local config and secrets — never commit these.
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+.adze/
+!.adze/config.example.jsonc
+
+# IDE fork: the upstream Code-OSS checkout is fetched, never vendored.
+apps/ide/vscode/
+apps/ide/.build/
+
+# Benchmark artifacts are large. Reports are committed; raw runs are not.
+bench/.runs/
+bench/**/node_modules/
+bench/reports/**/raw/
+
+# Local model / index caches
+.cache/
+*.lancedb/
+*.sqlite
+*.sqlite-journal
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*

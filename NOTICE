@@ -1,0 +1,56 @@
+Adze
+Copyright 2026 The Adze Authors
+
+This product includes software developed by The Adze Authors, licensed under the
+Apache License, Version 2.0 (see LICENSE).
+
+================================================================================
+Third-party attributions
+================================================================================
+
+This file records attribution obligations for code and design that Adze
+incorporates or derives from. It is generated in part by `pnpm licenses:check`
+and maintained by hand for design-level derivations.
+
+--------------------------------------------------------------------------------
+Design derivations (no code copied)
+--------------------------------------------------------------------------------
+
+Adze's sandbox permission model — the two-axis split of sandbox mode
+(read-only / workspace-write / full-access) from approval policy
+(untrusted / on-request / never), plus writable-root configuration — is modeled
+on the design used by OpenAI's Codex CLI (Apache-2.0,
+https://github.com/openai/codex). No code was copied.
+
+Adze's edit-format taxonomy and per-model format selection are modeled on
+Aider (Apache-2.0, https://github.com/Aider-AI/aider). No code was copied.
+
+Adze's "immutable system-context baseline per cache epoch" approach to prompt
+assembly is modeled on the context architecture documented by opencode
+(MIT, https://github.com/anomalyco/opencode). No code was copied.
+
+Adze's benchmark isolation design — agent container with future git history
+removed, and grading performed only on the committed diff inside a separate
+verifier container — is modeled on DeepSWE v1.1 by Datacurve
+(https://deepswe.datacurve.ai). No code was copied.
+
+Adze's IDE build pipeline — a patch series applied to a pristine upstream
+Code-OSS checkout, rather than a merged long-lived fork — is modeled on
+VSCodium (MIT, https://github.com/VSCodium/vscodium).
+
+--------------------------------------------------------------------------------
+Trademark notice
+--------------------------------------------------------------------------------
+
+Adze is an independent project. It is not affiliated with, endorsed by, or
+sponsored by Microsoft Corporation, GitHub Inc., Anysphere Inc. (Cursor),
+Anthropic PBC, OpenAI, or the Eclipse Foundation.
+
+"Visual Studio Code", "VS Code", and "GitHub" are trademarks of Microsoft
+Corporation. "Cursor" is a trademark of Anysphere Inc. Adze uses these names
+only for factual identification and interoperability description, as permitted
+by nominative fair use. No trademark rights are claimed or implied.
+
+Adze does not distribute, proxy, or facilitate access to the Visual Studio
+Marketplace. See docs/architecture/adr/0009-extension-gallery.md for the
+reasoning and the resulting product constraints.

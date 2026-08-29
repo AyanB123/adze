@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "adze-monorepo",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Adze — an open-source AI coding platform. One engine, every surface.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AyanB123/adze.git"
+  },
+  "homepage": "https://github.com/AyanB123/adze",
+  "bugs": "https://github.com/AyanB123/adze/issues",
+  "type": "module",
+  "packageManager": "pnpm@10.20.0",
+  "engines": {
+    "node": ">=22.12.0",
+    "pnpm": ">=10.0.0"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "test": "turbo run test",
+    "test:watch": "vitest",
+    "test:coverage": "turbo run test:coverage",
+    "typecheck": "turbo run typecheck",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "check": "pnpm lint && pnpm typecheck && pnpm test",
+    "clean": "turbo run clean && rimraf node_modules/.cache .turbo",
+    "adze": "node packages/cli/bin/adze.mjs",
+    "bench:apply": "node bench/harness/bin/adze-bench.mjs apply",
+    "bench:list": "node bench/harness/bin/adze-bench.mjs list",
+    "gallery:audit": "node scripts/audit-gallery-recommendations.mjs",
+    "licenses:check": "node scripts/check-licenses.mjs",
+    "rebrand": "node scripts/rebrand.mjs",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "release": "turbo run build && changeset publish"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "@changesets/cli": "catalog:",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
