@@ -8,11 +8,11 @@
   "files": {
     "includes": [
       "**",
-      "!**/dist/**",
-      "!**/coverage/**",
-      "!**/.turbo/**",
-      "!apps/ide/vscode/**",
-      "!bench/.runs/**",
+      "!**/dist",
+      "!**/coverage",
+      "!**/.turbo",
+      "!apps/ide/vscode",
+      "!bench/.runs",
       "!**/*.generated.ts"
     ]
   },
@@ -26,7 +26,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "suspicious": {
         "noExplicitAny": "error",
         "noConsole": {
