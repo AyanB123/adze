@@ -1,0 +1,167 @@
+/* The chat panel's styles. Theme variables only, so the panel follows the editor. */
+
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  height: 100vh;
+  box-sizing: border-box;
+  font-family: var(--vscode-font-family);
+  font-size: var(--vscode-font-size);
+  color: var(--vscode-foreground);
+  background: var(--vscode-sideBar-background);
+}
+
+#transcript {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 4rem;
+}
+
+pre.assistant {
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0 0 0.75rem;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+}
+
+.group h2 {
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.7;
+  margin: 0.75rem 0 0.25rem;
+}
+
+.group ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.group li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+  padding: 0.15rem 0;
+  border-left: 2px solid transparent;
+  padding-left: 0.4rem;
+}
+
+.tool-name,
+.edit-path {
+  font-family: var(--vscode-editor-font-family);
+}
+
+.tool-state,
+.edit-state,
+.edit-meta,
+.tool-flag {
+  font-size: 0.8em;
+  opacity: 0.75;
+}
+
+.tool-ok {
+  border-left-color: var(--vscode-charts-green);
+}
+
+.tool-failed,
+.edit-refused {
+  border-left-color: var(--vscode-charts-orange);
+}
+
+/* A denial is the permission gate working, not a failure. Its own colour. */
+.tool-denied {
+  border-left-color: var(--vscode-charts-blue);
+}
+
+.tool-running {
+  border-left-color: var(--vscode-charts-yellow);
+}
+
+.edit-applied {
+  border-left-color: var(--vscode-charts-green);
+}
+
+.tool-detail,
+.edit-reason {
+  opacity: 0.85;
+}
+
+.edit-message {
+  flex-basis: 100%;
+  margin: 0.2rem 0 0.4rem;
+  white-space: pre-wrap;
+  font-family: var(--vscode-editor-font-family);
+  font-size: 0.85em;
+  opacity: 0.85;
+}
+
+#status p {
+  margin: 0.2rem 0;
+  font-size: 0.85em;
+}
+
+#status .warning {
+  color: var(--vscode-editorWarning-foreground);
+}
+
+#status .error,
+#status .stop-error {
+  color: var(--vscode-editorError-foreground);
+}
+
+#status .stop-refused {
+  color: var(--vscode-charts-blue);
+}
+
+#composer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+textarea {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  font-family: var(--vscode-editor-font-family);
+  font-size: var(--vscode-editor-font-size);
+  color: var(--vscode-input-foreground);
+  background: var(--vscode-input-background);
+  border: 1px solid var(--vscode-input-border, transparent);
+  padding: 0.35rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.4rem;
+}
+
+button {
+  font-family: inherit;
+  font-size: inherit;
+  padding: 0.3rem 0.8rem;
+  color: var(--vscode-button-foreground);
+  background: var(--vscode-button-background);
+  border: none;
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+#cancel {
+  color: var(--vscode-button-secondaryForeground);
+  background: var(--vscode-button-secondaryBackground);
+}

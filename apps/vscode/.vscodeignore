@@ -1,0 +1,23 @@
+# Packaged artifact contents.
+#
+# The extension is not bundled yet (no bundler is installed in this workspace), so
+# `dist/`, `runtime/`, and the production `node_modules` all have to ship. See the
+# packaging section of README.md for why that is a prerequisite rather than a
+# finished state.
+
+.vscode/**
+.vscode-test/**
+
+src/**
+test/**
+tsconfig.json
+tsconfig.build.json
+**/*.ts
+**/*.map
+**/tsconfig*.json
+**/.turbo/**
+**/coverage/**
+
+.gitignore
+.eslintrc*
+*.vsix

@@ -38,6 +38,11 @@ catalog:
   tsup: ^8.5.1
   turbo: ^2.10.12
   "@changesets/cli": ^3.0.1
+  # Packaging a VSIX. MIT, dev-only, never shipped inside the artifact.
+  # Note: `ovsx` is deliberately absent: it is EPL-2.0, which this repo forbids.
+  # Publishing to Open VSX invokes it through `pnpm dlx`, so it never enters the
+  # dependency graph. See apps/vscode/README.md.
+  "@vscode/vsce": ^3.9.2
 
 # Only these packages may run install scripts. Anything else is denied by
 # default: a postinstall script is the cheapest supply-chain attack there is,

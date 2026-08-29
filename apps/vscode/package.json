@@ -1,0 +1,254 @@
+{
+  "name": "adze-vscode",
+  "displayName": "Adze",
+  "version": "0.0.1",
+  "description": "Adze in VS Code, Cursor, and Windsurf. The engine runs in-process; the extension renders.",
+  "license": "Apache-2.0",
+  "private": true,
+  "publisher": "adze",
+  "type": "module",
+  "main": "./runtime/entry.cjs",
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=22.12.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "agent",
+    "chat",
+    "code generation",
+    "local-first"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AyanB123/adze.git",
+    "directory": "apps/vscode"
+  },
+  "homepage": "https://github.com/AyanB123/adze",
+  "bugs": "https://github.com/AyanB123/adze/issues",
+  "activationEvents": [
+    "onView:adze.chatView"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "adze",
+          "title": "Adze",
+          "icon": "media/adze.svg"
+        }
+      ]
+    },
+    "views": {
+      "adze": [
+        {
+          "id": "adze.chatView",
+          "name": "Chat",
+          "type": "webview"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "adze.startChat",
+        "title": "Start Chat",
+        "category": "Adze"
+      },
+      {
+        "command": "adze.applyToSelection",
+        "title": "Apply to Selection",
+        "category": "Adze"
+      },
+      {
+        "command": "adze.cancelRun",
+        "title": "Cancel Run",
+        "category": "Adze"
+      },
+      {
+        "command": "adze.acceptEdits",
+        "title": "Accept Edits in This File",
+        "category": "Adze"
+      },
+      {
+        "command": "adze.revertEdits",
+        "title": "Revert Edits in This File",
+        "category": "Adze"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "adze.startChat",
+        "key": "ctrl+alt+a",
+        "mac": "cmd+alt+a"
+      },
+      {
+        "command": "adze.applyToSelection",
+        "key": "ctrl+alt+k",
+        "mac": "cmd+alt+k",
+        "when": "editorTextFocus"
+      },
+      {
+        "command": "adze.cancelRun",
+        "key": "ctrl+alt+backspace",
+        "mac": "cmd+alt+backspace",
+        "when": "adze.running"
+      },
+      {
+        "command": "adze.acceptEdits",
+        "key": "ctrl+alt+enter",
+        "mac": "cmd+alt+enter",
+        "when": "adze.hasReviewableEdits"
+      },
+      {
+        "command": "adze.revertEdits",
+        "key": "ctrl+alt+delete",
+        "mac": "cmd+alt+delete",
+        "when": "adze.hasReviewableEdits"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "adze.applyToSelection",
+          "group": "adze@1",
+          "when": "editorHasSelection"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "adze.cancelRun",
+          "when": "adze.running"
+        },
+        {
+          "command": "adze.acceptEdits",
+          "when": "adze.hasReviewableEdits"
+        },
+        {
+          "command": "adze.revertEdits",
+          "when": "adze.hasReviewableEdits"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Adze",
+      "properties": {
+        "adze.model": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Model to use, as `provider/model` (for example `anthropic/claude-sonnet-4-5-20250929`). Empty means the provider configuration decides. Credentials are never read from settings — see `adze.credentials` in the README."
+        },
+        "adze.sandbox.mode": {
+          "type": "string",
+          "enum": [
+            "read-only",
+            "workspace-write",
+            "full-access"
+          ],
+          "default": "workspace-write",
+          "enumDescriptions": [
+            "The agent may read but never write or run commands that write.",
+            "The agent may write inside the workspace root.",
+            "No containment is requested."
+          ],
+          "markdownDescription": "What the agent is permitted to do. On Windows there is no OS-level containment, so this is enforced by the permission gate alone; the extension says so rather than letting you infer a boundary that is not there. An unrecognised value falls back to `read-only`, never to the default."
+        },
+        "adze.approvals.policy": {
+          "type": "string",
+          "enum": [
+            "untrusted",
+            "on-request",
+            "never"
+          ],
+          "default": "on-request",
+          "enumDescriptions": [
+            "Ask before anything the gate cannot already authorise.",
+            "Ask only for what the sandbox would otherwise block.",
+            "Never ask. An action needing approval is refused, not escalated."
+          ],
+          "markdownDescription": "When you are asked to approve an action. `never` **refuses rather than escalating**. An unrecognised value falls back to `never`, never to the default, so a typo cannot grant more than you asked for."
+        },
+        "adze.budget.maxSteps": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Maximum model round-trips per turn. `null` means unbounded. Must be a positive integer; `0` is rejected rather than treated as unbounded."
+        },
+        "adze.budget.maxTokens": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Maximum total tokens per turn. `null` means unbounded."
+        },
+        "adze.budget.maxWallClockMs": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Wall-clock ceiling per turn, in milliseconds. `null` means unbounded."
+        },
+        "adze.budget.maxSpendUsd": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "default": null,
+          "markdownDescription": "Spend ceiling per turn, in USD. `null` means unbounded. `0` is a valid value and means no spend is permitted."
+        },
+        "adze.inlineCompletion.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Offer ghost-text completions as you type. **Off by default**: the protocol has no cheap-completion message, so each suggestion costs a full turn against your configured provider. Turning this on is opting into billed requests you did not explicitly trigger."
+        },
+        "adze.inlineCompletion.debounceMs": {
+          "type": "number",
+          "default": 500,
+          "minimum": 100,
+          "markdownDescription": "How long typing must pause before a ghost-text request is issued."
+        },
+        "adze.inlineCompletion.maxPrefixBytes": {
+          "type": "number",
+          "default": 4096,
+          "minimum": 256,
+          "markdownDescription": "How much text before the cursor is sent with a ghost-text request."
+        },
+        "adze.instructions": {
+          "type": "string",
+          "default": "",
+          "markdownDescription": "Extra instructions prepended to every session, the equivalent of an `AGENTS.md` fragment."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "package:vsix": "vsce package --out adze-vscode.vsix",
+    "publish:marketplace": "vsce publish",
+    "publish:openvsx": "pnpm dlx ovsx@1.1.1 publish adze-vscode.vsix",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@adze/core": "workspace:*",
+    "@adze/protocol": "workspace:*",
+    "@adze/providers": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "@vscode/vsce": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
