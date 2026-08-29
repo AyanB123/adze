@@ -1,0 +1,362 @@
+{
+  "version": 1,
+  "sourcedOn": "2026-08-29",
+  "sources": {
+    "anthropic": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "openai": "https://developers.openai.com/api/docs/pricing"
+  },
+  "notModelled": [
+    "Cache-write premium. Anthropic bills a 5-minute cache write at 1.25x base input and a 1-hour write at 2x; OpenAI bills writes at 1.25x on the models that charge for them. `Usage` carries three non-overlapping buckets and no fourth, so write tokens are counted at the base input rate. Reported cost is therefore a lower bound on the step that opens a cache epoch, short by at most 0.25x (5m) or 1x (1h) of the write tokens' base cost, and exact on every step after it. The epoch assembler exists to make those later steps the common case.",
+    "Long-context tiers. OpenAI prices a request above 272K input tokens at 2x input and 1.5x output for the whole request; the rates here are the short-context tier. A turn that crosses that boundary is under-reported.",
+    "Non-standard service tiers. Batch (-50%), Flex, Fast mode, and the 1.1x data-residency multiplier are not represented. Adze issues standard-tier requests only.",
+    "Context windows are recorded only where a first-party page states one. `undefined` means unverified, not unlimited: an invented number here would be a capability claim with no evidence behind it."
+  ],
+  "models": [
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-5",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 25
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-8",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 25
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-7",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 25
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-6",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 25
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-opus-4-5",
+      "aliases": ["claude-opus-4-5-20251101"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 200000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 25
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-5",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 2,
+        "cachedInputPerMTok": 0.2,
+        "outputPerMTok": 10
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-4-6",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 3,
+        "cachedInputPerMTok": 0.3,
+        "outputPerMTok": 15
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-sonnet-4-5",
+      "aliases": ["claude-sonnet-4-5-20250929"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 200000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 3,
+        "cachedInputPerMTok": 0.3,
+        "outputPerMTok": 15
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-haiku-4-5",
+      "aliases": ["claude-haiku-4-5-20251001"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 200000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1,
+        "cachedInputPerMTok": 0.1,
+        "outputPerMTok": 5
+      }
+    },
+    {
+      "provider": "anthropic",
+      "id": "claude-fable-5",
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1000000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 10,
+        "cachedInputPerMTok": 1,
+        "outputPerMTok": 50
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.6-sol",
+      "aliases": ["gpt-5.6"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "contextWindow": 1050000,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 4,
+        "cachedInputPerMTok": 0.4,
+        "outputPerMTok": 20
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.6-terra",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 2,
+        "cachedInputPerMTok": 0.2,
+        "outputPerMTok": 12
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.6-luna",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.2,
+        "cachedInputPerMTok": 0.02,
+        "outputPerMTok": 1.2
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.5",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 5,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 30
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.4",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 2.5,
+        "cachedInputPerMTok": 0.25,
+        "outputPerMTok": 15
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.4-mini",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.75,
+        "cachedInputPerMTok": 0.075,
+        "outputPerMTok": 4.5
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.4-nano",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.2,
+        "cachedInputPerMTok": 0.02,
+        "outputPerMTok": 1.25
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.3-codex",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1.75,
+        "cachedInputPerMTok": 0.175,
+        "outputPerMTok": 14
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.2",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1.75,
+        "cachedInputPerMTok": 0.175,
+        "outputPerMTok": 14
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5.1",
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1.25,
+        "cachedInputPerMTok": 0.125,
+        "outputPerMTok": 10
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5",
+      "aliases": ["gpt-5-2025-08-07"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1.25,
+        "cachedInputPerMTok": 0.125,
+        "outputPerMTok": 10
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5-mini",
+      "aliases": ["gpt-5-mini-2025-08-07"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.25,
+        "cachedInputPerMTok": 0.025,
+        "outputPerMTok": 2
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-5-nano",
+      "aliases": ["gpt-5-nano-2025-08-07"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.05,
+        "cachedInputPerMTok": 0.005,
+        "outputPerMTok": 0.4
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-4.1",
+      "aliases": ["gpt-4.1-2025-04-14"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 2,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 8
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "gpt-4.1-mini",
+      "aliases": ["gpt-4.1-mini-2025-04-14"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 0.4,
+        "cachedInputPerMTok": 0.1,
+        "outputPerMTok": 1.6
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "o3",
+      "aliases": ["o3-2025-04-16"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 2,
+        "cachedInputPerMTok": 0.5,
+        "outputPerMTok": 8
+      }
+    },
+    {
+      "provider": "openai",
+      "id": "o4-mini",
+      "aliases": ["o4-mini-2025-04-16"],
+      "nativeToolCalling": true,
+      "vision": true,
+      "prices": {
+        "currency": "USD",
+        "inputPerMTok": 1.1,
+        "cachedInputPerMTok": 0.275,
+        "outputPerMTok": 4.4
+      }
+    }
+  ]
+}
