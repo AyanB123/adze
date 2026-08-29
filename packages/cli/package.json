@@ -1,0 +1,43 @@
+{
+  "name": "@adze/cli",
+  "version": "0.0.1",
+  "description": "The adze command-line interface. Plain text first, so it stays scriptable.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "bin": {
+    "adze": "bin/adze.mjs"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
+  },
+  "dependencies": {
+    "@adze/apply": "workspace:*",
+    "@adze/protocol": "workspace:*",
+    "commander": "catalog:",
+    "picocolors": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}
