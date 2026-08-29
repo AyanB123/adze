@@ -1,0 +1,223 @@
+{
+  "cases": [
+    {
+      "id": "brace-truncation-refused",
+      "description": "Deleting a closing brace leaves the file unbalanced. Refused with parse-broken rather than written — this is the corruption class the applier exists to prevent.",
+      "path": "src/truncated.ts",
+      "original": ["function f() {", "  return 1;", "}", ""],
+      "edits": [{ "search": "}", "replace": "" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "brackets", "safety"]
+    },
+    {
+      "id": "mismatched-bracket-type-refused",
+      "description": "A brace closed by a bracket. Balanced by count, wrong by kind.",
+      "path": "src/mismatch.ts",
+      "original": ["const o = { a: 1 };", ""],
+      "edits": [{ "search": "const o = { a: 1 };", "replace": "const o = { a: 1 ];" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "brackets"]
+    },
+    {
+      "id": "unmatched-closing-brace-refused",
+      "description": "An extra closing brace with nothing open. Caught before the file is written.",
+      "path": "src/extra.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "const a = 1;\n}" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "brackets"]
+    },
+    {
+      "id": "unterminated-string-refused",
+      "description": "A single-line string with no closing quote. A classic truncation artifact, and the resulting file usually still looks plausible.",
+      "path": "src/string.ts",
+      "original": ["const s = \"hello\";", ""],
+      "edits": [{ "search": "const s = \"hello\";", "replace": "const s = \"hello;" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "strings"]
+    },
+    {
+      "id": "unterminated-template-literal-refused",
+      "description": "An unterminated backtick template. Deliberately distinct from the quoted-string case: template scanning has its own state.",
+      "path": "src/template.ts",
+      "original": ["const t = `hi`;", ""],
+      "edits": [{ "search": "const t = `hi`;", "replace": "const t = `hi;" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "strings", "templates"]
+    },
+    {
+      "id": "template-interpolation-with-object-literal-applies",
+      "description": "A template interpolation containing an object literal. The regression that motivated this case: scanning that popped the interpolation context on the first inner brace reported this correct file as unbalanced, so a valid edit was refused. Must apply.",
+      "path": "src/interp.ts",
+      "original": ["const s = `x`;", ""],
+      "edits": [
+        { "search": "const s = `x`;", "replace": "const s = `value: ${ { k: 1 }.k } done`;" }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["const s = `value: ${ { k: 1 }.k } done`;", ""]
+      },
+      "tags": ["validation", "templates", "regression"],
+      "source": "packages/apply: template scanning popped the interpolation context on the first inner brace"
+    },
+    {
+      "id": "nested-template-interpolation-applies",
+      "description": "A template inside an interpolation inside a template. Nesting must not confuse the state machine into a false positive.",
+      "path": "src/nested-template.ts",
+      "original": ["const s = `a`;", ""],
+      "edits": [{ "search": "const s = `a`;", "replace": "const s = `a ${ `b ${ 1 + 1 }` } c`;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const s = `a ${ `b ${ 1 + 1 }` } c`;", ""]
+      },
+      "tags": ["validation", "templates"]
+    },
+    {
+      "id": "brace-inside-string-is-not-a-bracket",
+      "description": "An unbalanced brace inside a string literal is text, not structure. Treating it as structure would refuse a perfectly valid edit.",
+      "path": "src/braces-in-string.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "const a = \"} not a brace {\";" }],
+      "expect": { "kind": "output", "content": ["const a = \"} not a brace {\";", ""] },
+      "tags": ["validation", "strings", "false-positive-guard"]
+    },
+    {
+      "id": "brace-inside-comment-is-not-a-bracket",
+      "description": "The same for comments, including a block comment. A false positive here blocks a legitimate edit, which is why the structural checker stays conservative.",
+      "path": "src/braces-in-comment.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [
+        {
+          "search": "const a = 1;",
+          "replace": "// closing } here\n/* and { here */\nconst a = 1;"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["// closing } here", "/* and { here */", "const a = 1;", ""]
+      },
+      "tags": ["validation", "comments", "false-positive-guard"]
+    },
+    {
+      "id": "unterminated-block-comment-refused",
+      "description": "An opened block comment that never closes swallows the rest of the file.",
+      "path": "src/comment.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "/* note\nconst a = 1;" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "comments"]
+    },
+    {
+      "id": "python-dropped-body-refused",
+      "description": "A Python block opener whose indented body was dropped. Braces languages give no comparable signal, so this check is the only thing between a model's slip and a file that no longer runs.",
+      "path": "app/dropped.py",
+      "original": ["def f():", "    return 1", ""],
+      "edits": [{ "search": "def f():\n    return 1", "replace": "def f():\nreturn 1" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "python", "indentation", "safety"]
+    },
+    {
+      "id": "python-block-opener-at-eof-refused",
+      "description": "A block opener as the final line, with no body at all.",
+      "path": "app/eof.py",
+      "original": ["x = 1", ""],
+      "edits": [{ "search": "x = 1", "replace": "if x:" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "python"]
+    },
+    {
+      "id": "python-colon-inside-comment-not-a-block-opener",
+      "description": "A trailing colon inside a comment must not be read as a block opener. Otherwise the indentation check refuses valid Python.",
+      "path": "app/comment.py",
+      "original": ["x = 1", ""],
+      "edits": [{ "search": "x = 1", "replace": "x = 1  # note: this is fine" }],
+      "expect": { "kind": "output", "content": ["x = 1  # note: this is fine", ""] },
+      "tags": ["validation", "python", "false-positive-guard"]
+    },
+    {
+      "id": "python-triple-quoted-string-applies",
+      "description": "A triple-quoted string containing quotes and braces. Multi-line string state must be tracked or this reads as unterminated.",
+      "path": "app/doc.py",
+      "original": ["x = 1", ""],
+      "edits": [
+        {
+          "search": "x = 1",
+          "replace": "DOC = \"\"\"\nnot \"terminated\" here { either\n\"\"\"\nx = 1"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["DOC = \"\"\"", "not \"terminated\" here { either", "\"\"\"", "x = 1", ""]
+      },
+      "tags": ["validation", "python", "strings"]
+    },
+    {
+      "id": "escaped-quote-does-not-terminate-string",
+      "description": "A backslash-escaped quote inside a string. Mishandling the escape makes the checker think the string closed early and then that the next one never closes.",
+      "path": "src/escape.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "const a = \"he said \\\"hi\\\"\";" }],
+      "expect": { "kind": "output", "content": ["const a = \"he said \\\"hi\\\"\";", ""] },
+      "tags": ["validation", "strings", "false-positive-guard"]
+    },
+    {
+      "id": "shell-case-esac-not-treated-as-brackets",
+      "description": "Shell uses braces for expansion and case/esac for blocks, so bracket balance produces false positives. Brackets are not checked for shell; string termination still is.",
+      "path": "scripts/run.sh",
+      "original": ["#!/usr/bin/env bash", "echo hello", ""],
+      "edits": [
+        {
+          "search": "echo hello",
+          "replace": "case \"$1\" in\n  a) echo ${A} ;;\n  *) echo other ;;\nesac"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": [
+          "#!/usr/bin/env bash",
+          "case \"$1\" in",
+          "  a) echo ${A} ;;",
+          "  *) echo other ;;",
+          "esac",
+          ""
+        ]
+      },
+      "tags": ["validation", "shell", "false-positive-guard"]
+    },
+    {
+      "id": "json-trailing-comma-structure-still-balanced",
+      "description": "A JSON edit that stays balanced applies. The structural checker is conservative: it reports a problem only when the text is definitely malformed, and a trailing comma is a parse error it deliberately does not claim to catch.",
+      "path": "config/app.json",
+      "original": ["{", "  \"a\": 1", "}", ""],
+      "edits": [{ "search": "  \"a\": 1", "replace": "  \"a\": 1,\n  \"b\": 2" }],
+      "expect": {
+        "kind": "output",
+        "content": ["{", "  \"a\": 1,", "  \"b\": 2", "}", ""],
+        "validator": "structural"
+      },
+      "tags": ["validation", "json"]
+    },
+    {
+      "id": "json-unbalanced-brace-refused",
+      "description": "An unbalanced JSON object is caught.",
+      "path": "config/app.json",
+      "original": ["{", "  \"a\": 1", "}", ""],
+      "edits": [{ "search": "  \"a\": 1", "replace": "  \"a\": { 1" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "json"]
+    },
+    {
+      "id": "unknown-language-reports-none-not-a-pass",
+      "description": "An unrecognised extension is not validated, and the validator level says so. `none` is a claim about evidence — it means we declined to guess, not that the file is fine.",
+      "path": "notes/scratch.unknownext",
+      "original": ["anything at all ( unbalanced", ""],
+      "edits": [{ "search": "anything at all ( unbalanced", "replace": "still ( unbalanced" }],
+      "expect": {
+        "kind": "output",
+        "content": ["still ( unbalanced", ""],
+        "validator": "none"
+      },
+      "tags": ["validation", "honesty"]
+    }
+  ]
+}

@@ -75,6 +75,22 @@ importers:
         specifier: 'catalog:'
         version: 4.1.11(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(vite@8.2.2(@types/node@26.4.0)(yaml@2.9.0))
 
+  bench/harness:
+    dependencies:
+      '@adze/apply':
+        specifier: workspace:*
+        version: link:../../packages/apply
+    devDependencies:
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.4.0
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.11(@types/node@26.4.0)(@vitest/coverage-v8@4.1.11)(vite@8.2.2(@types/node@26.4.0)(yaml@2.9.0))
+
   packages/apply:
     devDependencies:
       '@types/node':

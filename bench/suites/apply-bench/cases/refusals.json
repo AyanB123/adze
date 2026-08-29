@@ -1,0 +1,118 @@
+{
+  "cases": [
+    {
+      "id": "ambiguous-two-identical-lines",
+      "description": "The search block matches twice. Refused with both locations rather than silently taking the first — picking the first is invisible corruption that nobody can reproduce.",
+      "path": "src/dup.ts",
+      "original": ["let x = 1;", "let x = 1;", ""],
+      "edits": [{ "search": "let x = 1;", "replace": "const x = 1;" }],
+      "expect": { "kind": "refusal", "reason": "ambiguous", "tier": "search-replace" },
+      "tags": ["refusal", "ambiguity", "safety"]
+    },
+    {
+      "id": "ambiguous-repeated-block",
+      "description": "A multi-line block repeated in two functions. Still ambiguous: more lines does not mean more unique.",
+      "path": "src/dup-block.ts",
+      "original": [
+        "function a() {",
+        "  const t = compute();",
+        "  return t;",
+        "}",
+        "function b() {",
+        "  const t = compute();",
+        "  return t;",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "  const t = compute();\n  return t;",
+          "replace": "  return compute();"
+        }
+      ],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["refusal", "ambiguity"]
+    },
+    {
+      "id": "ambiguity-resolved-by-occurrence",
+      "description": "The same ambiguous block, disambiguated explicitly by the caller. An occurrence selector is a decision; inferring one is not.",
+      "path": "src/dup.ts",
+      "original": ["let x = 1;", "let x = 1;", ""],
+      "edits": [{ "search": "let x = 1;", "replace": "const x = 2;", "occurrence": 2 }],
+      "expect": { "kind": "output", "content": ["let x = 1;", "const x = 2;", ""] },
+      "tags": ["refusal", "ambiguity", "occurrence"]
+    },
+    {
+      "id": "occurrence-out-of-range",
+      "description": "An occurrence past the number of matches is not-found, not a silent clamp to the last match.",
+      "path": "src/dup.ts",
+      "original": ["let x = 1;", "let x = 1;", ""],
+      "edits": [{ "search": "let x = 1;", "replace": "const x = 2;", "occurrence": 5 }],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["refusal", "occurrence"]
+    },
+    {
+      "id": "not-found-single-changed-identifier",
+      "description": "deleteUser against a file containing deleteUsers. One character apart, and a different function. This must be not-found: there is deliberately no edit-distance strategy, because a near-miss on source code is a different program.",
+      "path": "src/users.ts",
+      "original": [
+        "export function deleteUsers(ids: string[]) {",
+        "  return db.remove(ids);",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "export function deleteUser(ids: string[]) {",
+          "replace": "export function removeUser(ids: string[]) {"
+        }
+      ],
+      "expect": { "kind": "refusal", "reason": "not-found", "tier": "search-replace" },
+      "tags": ["refusal", "not-found", "safety", "fuzzy-guard"]
+    },
+    {
+      "id": "not-found-transposed-argument-order",
+      "description": "Same identifiers, different argument order. Textually close, semantically unrelated. Not-found.",
+      "path": "src/geometry.ts",
+      "original": ["export function move(x: number, y: number) {}", ""],
+      "edits": [
+        {
+          "search": "export function move(y: number, x: number) {}",
+          "replace": "export function translate(y: number, x: number) {}"
+        }
+      ],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["refusal", "not-found", "fuzzy-guard"]
+    },
+    {
+      "id": "not-found-off-by-one-numeric-literal",
+      "description": "A literal that differs by one digit. A fuzzy strategy would match this and change the wrong constant.",
+      "path": "src/limits.ts",
+      "original": ["const TIMEOUT_MS = 30000;", ""],
+      "edits": [{ "search": "const TIMEOUT_MS = 3000;", "replace": "const TIMEOUT_MS = 60000;" }],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["refusal", "not-found", "fuzzy-guard"]
+    },
+    {
+      "id": "no-op-identical-search-and-replace",
+      "description": "Search and replace are identical, so the edit does nothing. Reported as a no-op rather than as a success, because a model that emits this has misunderstood the file and needs to know.",
+      "path": "src/noop.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "const a = 1;" }],
+      "expect": { "kind": "refusal", "reason": "no-op" },
+      "tags": ["refusal", "no-op"]
+    },
+    {
+      "id": "second-edit-in-sequence-refused-leaves-nothing-written",
+      "description": "The first edit is valid and the second is ambiguous. The whole apply is refused: partial application would leave the file in a state neither the model nor the user asked for.",
+      "path": "src/pair.ts",
+      "original": ["let a = 1;", "let b = 2;", "let b = 2;", ""],
+      "edits": [
+        { "search": "let a = 1;", "replace": "const a = 1;" },
+        { "search": "let b = 2;", "replace": "const b = 2;" }
+      ],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["refusal", "ambiguity", "sequencing"]
+    }
+  ]
+}

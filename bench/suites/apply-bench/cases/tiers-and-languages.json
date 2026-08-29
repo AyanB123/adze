@@ -1,0 +1,148 @@
+{
+  "cases": [
+    {
+      "id": "empty-search-prepends",
+      "description": "An empty search block means insert at the top of the file, which is unambiguous and needs no matching.",
+      "path": "src/prepend.ts",
+      "original": ["export const b = 2;", ""],
+      "edits": [{ "search": "", "replace": "import './polyfill.js';\n" }],
+      "expect": {
+        "kind": "output",
+        "content": ["import './polyfill.js';", "export const b = 2;", ""]
+      },
+      "tags": ["tiers", "search-replace"]
+    },
+    {
+      "id": "empty-replace-deletes-region",
+      "description": "An empty replacement deletes the matched region, and the result must still validate.",
+      "path": "src/delete.ts",
+      "original": ["const keep = 1;", "const drop = 2;", ""],
+      "edits": [{ "search": "const drop = 2;\n", "replace": "" }],
+      "expect": { "kind": "output", "content": ["const keep = 1;", ""] },
+      "tags": ["tiers", "search-replace"]
+    },
+    {
+      "id": "sequential-edits-see-earlier-results",
+      "description": "Each block is located against the current content, so a later edit sees the effect of an earlier one. That matches how models reason about ordered edits.",
+      "path": "src/seq.ts",
+      "original": ["let a = 1;", "let b = 2;", ""],
+      "edits": [
+        { "search": "let a = 1;", "replace": "const a = 10;" },
+        { "search": "let b = 2;", "replace": "const b = 20;" }
+      ],
+      "expect": { "kind": "output", "content": ["const a = 10;", "const b = 20;", ""] },
+      "tags": ["tiers", "sequencing"]
+    },
+    {
+      "id": "whole-file-tier-when-search-replace-cannot-match",
+      "description": "The search block is absent, so Tier 1 fails and Tier 2 rewrites the file from the supplied replacement. Tier 2 is validated exactly like Tier 1.",
+      "path": "src/rewrite.ts",
+      "original": ["const old = 1;", ""],
+      "edits": [{ "search": "does not exist anywhere", "replace": "irrelevant" }],
+      "replacement": ["export const fresh = 2;", ""],
+      "expect": {
+        "kind": "output",
+        "content": ["export const fresh = 2;", ""],
+        "tier": "whole-file"
+      },
+      "tags": ["tiers", "whole-file"]
+    },
+    {
+      "id": "whole-file-tier-still-parse-validated",
+      "description": "A whole-file replacement that does not parse is refused. A model producing a whole file is still a model, so its output is untrusted in exactly the same way.",
+      "path": "src/rewrite-broken.ts",
+      "original": ["const old = 1;", ""],
+      "edits": [{ "search": "absent", "replace": "irrelevant" }],
+      "replacement": ["export function f() {", "  return 1;", ""],
+      "expect": { "kind": "refusal", "reason": "parse-broken", "tier": "whole-file" },
+      "tags": ["tiers", "whole-file", "validation", "safety"]
+    },
+    {
+      "id": "file-too-large-for-whole-file-tier",
+      "description": "A replacement above the configured byte ceiling is refused with file-too-large, a distinct reason because the fix is distinct: raise the limit or use search/replace.",
+      "path": "src/big.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "absent", "replace": "irrelevant" }],
+      "replacement": [
+        "const b = 2; // this replacement is deliberately over the tiny limit below",
+        ""
+      ],
+      "options": { "maxWholeFileBytes": 16 },
+      "expect": { "kind": "refusal", "reason": "file-too-large" },
+      "tags": ["tiers", "whole-file", "limits"]
+    },
+    {
+      "id": "tier-unavailable-when-whole-file-has-no-replacement",
+      "description": "Only the whole-file tier is configured and no replacement was supplied, so the tier never really ran. tier-unavailable says exactly that rather than blaming the input.",
+      "path": "src/unavailable.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "const a = 1;", "replace": "const a = 2;" }],
+      "options": { "tiers": ["whole-file"] },
+      "expect": { "kind": "refusal", "reason": "tier-unavailable" },
+      "tags": ["tiers", "reporting"]
+    },
+    {
+      "id": "substantive-diagnosis-survives-tier-escalation",
+      "description": "Tier 1 refuses as ambiguous and Tier 2 has no replacement, so it would report tier-unavailable. The ambiguous diagnosis must win: it is the message the model needs in order to retry usefully, and letting a later 'the tier never ran' overwrite it destroys the only actionable feedback in the loop. The tier assertion pins the second half of the same bug — the refusal must also be attributed to the tier that diagnosed it, or every tier-1 refusal lands in the tier-2 column of the per-tier breakdown.",
+      "path": "src/escalate.ts",
+      "original": ["let x = 1;", "let x = 1;", ""],
+      "edits": [{ "search": "let x = 1;", "replace": "const x = 1;" }],
+      "options": { "tiers": ["search-replace", "whole-file"] },
+      "expect": { "kind": "refusal", "reason": "ambiguous", "tier": "search-replace" },
+      "tags": ["tiers", "reporting", "regression"],
+      "source": "packages/apply: a later tier's tier-unavailable overwrote an earlier substantive diagnosis, and the reported tier was taken from whichever tier ran last"
+    },
+    {
+      "id": "fast-apply-tier-unavailable-without-a-provider",
+      "description": "Tier 3 is configured but no provider exists, which is the default state: Adze must work fully without a fast-apply model, so a missing provider is reported rather than assumed.",
+      "path": "src/fast.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "absent", "replace": "irrelevant" }],
+      "options": { "tiers": ["fast-apply"] },
+      "expect": { "kind": "refusal", "reason": "tier-unavailable" },
+      "tags": ["tiers", "fast-apply"]
+    },
+    {
+      "id": "go-exact-edit",
+      "description": "A braces language other than TypeScript, to confirm language detection routes to the c-like validator rather than to no validator at all.",
+      "path": "cmd/main.go",
+      "original": ["package main", "", "func main() {", "\tprintln(\"a\")", "}", ""],
+      "edits": [{ "search": "\tprintln(\"a\")", "replace": "\tprintln(\"b\")" }],
+      "expect": {
+        "kind": "output",
+        "content": ["package main", "", "func main() {", "\tprintln(\"b\")", "}", ""],
+        "validator": "structural"
+      },
+      "tags": ["languages", "go"]
+    },
+    {
+      "id": "rust-exact-edit",
+      "description": "Rust, with a generic parameter list that a naive bracket counter could mishandle.",
+      "path": "src/lib.rs",
+      "original": [
+        "fn main() {",
+        "    let v: Vec<u8> = vec![1, 2];",
+        "    println!(\"{:?}\", v);",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "    let v: Vec<u8> = vec![1, 2];",
+          "replace": "    let v: Vec<u8> = vec![1, 2, 3];"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": [
+          "fn main() {",
+          "    let v: Vec<u8> = vec![1, 2, 3];",
+          "    println!(\"{:?}\", v);",
+          "}",
+          ""
+        ]
+      },
+      "tags": ["languages", "rust"]
+    }
+  ]
+}
