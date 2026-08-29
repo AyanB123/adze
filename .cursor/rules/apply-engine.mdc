@@ -1,0 +1,72 @@
+---
+description: Non-negotiable constraints on the three-tier edit applier
+globs: packages/apply/**
+---
+
+# Apply engine constraints
+
+`@adze/apply` is the component whose failures users actually feel. A wrong answer
+is annoying; a mangled file destroys trust in a way a wrong suggestion does not.
+Everything below exists because relaxing it is how files get corrupted in a way
+nobody can reproduce.
+
+Full reasoning: `docs/architecture/adr/0005-edit-application.md`.
+
+## Matching
+
+- **Ambiguity is an error, never a guess.** If a search block matches more than
+  once at a given strategy level, return `ambiguous` with every match location.
+  Silently taking the first match is the single worst thing this package could
+  do, because the resulting corruption is invisible and unreproducible.
+- **Never relax past indentation tolerance.** The escalation ladder is exact →
+  whitespace-normalized → indentation-tolerant → anchored, and it stops there.
+  Do not add Levenshtein, trigram, token-similarity, or any other
+  "closest match" strategy. A near-miss on source code is a different program.
+- **Anchored matching requires an explicit elision marker.** Without that
+  requirement it matches almost any block whose first and last lines are unique,
+  which is far too aggressive for a strategy that replaces everything between
+  them.
+- Indentation-tolerant matching must re-indent the replacement to the indentation
+  actually found. Locating code correctly and inserting it at the wrong nesting
+  level parses in braces languages and silently breaks Python — a worse failure
+  than a refusal.
+
+## Validation
+
+- **Every tier parse-validates before returning success**, including Tier 3. A
+  fast-apply model is a model, so its output is untrusted exactly like Tier 1's.
+- A validation failure falls through to the next tier. If every tier fails, the
+  edit is **refused**. Refusal is a good outcome and gets reported as one.
+- **`ValidationResult.validator` must report the level that actually ran.**
+  `tree-sitter` means a real parse happened. `structural` means the balance
+  checker ran. `none` means the language was unknown and we declined to guess.
+  Never widen a `structural` result to `tree-sitter` for cosmetic reasons — the
+  field is a claim about evidence, and benchmark reports depend on it.
+- The structural checker stays conservative. It reports a problem only when the
+  text is definitely malformed, because a false positive blocks a legitimate
+  edit. Prefer missing a corruption to refusing a valid edit — Tier 2 and the
+  retry loop are the backstop.
+- Do not add `skipValidation` shortcuts to new code paths. The option exists for
+  callers who own the risk, not as an internal convenience.
+
+## Failure reporting
+
+- Every `ApplyFailureReason` maps to a distinct user-facing fix. Do not collapse
+  reasons together, and do not invent a generic `error`.
+- Failure messages are written for a **model** to read and retry against. Say
+  what was tried and what would disambiguate. One round of feedback is the
+  highest-value intervention in the whole loop.
+- `tier-unavailable` means a tier never really ran. It must never overwrite a
+  substantive diagnosis such as `ambiguous` from an earlier tier.
+
+## Tests
+
+- **Every new model failure becomes a permanent test case.** A model edit that
+  corrupted a file or was wrongly refused is a bug report *and* a regression
+  test; add it to `packages/apply/test/` and to `bench/suites/apply-bench/cases/`.
+  This is stated in `CONTRIBUTING.md` as the highest-leverage contribution in the
+  repo, so the bar for adding a case is deliberately low.
+- A bug fix needs a test that fails before the fix.
+- Telemetry is part of the contract, not diagnostics. `tier`, `strategy`, and
+  `validation` are what make "apply success rate per model per tier" publishable,
+  so assert on them rather than only on `ok`.

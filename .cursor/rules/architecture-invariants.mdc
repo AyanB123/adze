@@ -1,0 +1,88 @@
+---
+description: Adze architecture invariants that reviews enforce
+alwaysApply: true
+---
+
+# Adze architecture invariants
+
+Adze is an open-source AI coding platform: a headless engine plus several
+surfaces (CLI, VS Code extension, Code-OSS fork IDE, HTTP daemon). The rules
+below are not style preferences. Each one exists because violating it is a known
+way this class of project fails, and each is enforced at review.
+
+Full reasoning: `docs/architecture/README.md` and `docs/architecture/adr/`.
+
+## The six hard rules
+
+1. **The engine renders nothing.** `@adze/core` must not import from any surface
+   package (`cli`, `vscode`, `ide`, `hub`) and must not emit terminal escapes,
+   HTML, or display-intended markdown. It returns structured events; surfaces
+   render them.
+
+2. **Surfaces talk to the engine only through `@adze/protocol`.** If the CLI can
+   do something the extension cannot, the protocol is missing a message — add the
+   message. Never add a private back channel. This is the rule that keeps three
+   surfaces from becoming three products.
+
+3. **No plugin may inject UI into the engine.** UI extension happens per-surface.
+
+4. **Every tool call passes the permission gate.** No exceptions, including
+   built-in tools. There must be no code path around it.
+
+5. **Nothing leaves the machine without explicit opt-in.** Local-first is a
+   product promise. A new outbound network call needs an ADR or must go through an
+   already-configured provider.
+
+6. **Benchmark claims follow `docs/benchmarks/strategy.md`.** No aggregator
+   citations. No claimed win inside 3 percentage points. Trajectories published
+   for failures as well as passes.
+
+## Package dependency rules
+
+```
+protocol → core → sdk → surfaces
+providers, apply, retrieval, sandbox, mcp, plugin-sdk → core
+```
+
+- `@adze/protocol` depends on nothing but `zod`. A contract with dependencies is
+  not a contract.
+- Service packages (`providers`, `apply`, `retrieval`, `sandbox`, `mcp`) must not
+  import each other. They stay individually swappable and testable.
+- Only surfaces import `@adze/sdk`.
+- Nothing imports from `bench/`. Benchmark code must not influence product code.
+
+## Code conventions
+
+- TypeScript, ESM only, Node 22+. Relative imports carry the `.js` extension
+  (`moduleResolution: nodenext`).
+- `strict` plus `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes` are
+  on. Array indexing yields `T | undefined` — handle it rather than asserting.
+- No `any`. No non-null assertions (`!`) outside tests.
+- Biome for lint and format. Run `pnpm lint:fix` before committing.
+- Prefer WASM over native Node addons, so we never rebuild native modules across
+  Electron ABI × OS × arch.
+
+## When adding a dependency
+
+- Put the version in the `catalog:` block of `pnpm-workspace.yaml` and reference
+  it as `catalog:`. Do not inline versions in a package.
+- Read the actual LICENSE file. Allowed: Apache-2.0, MIT, BSD, ISC, Unlicense,
+  CC0. Forbidden: GPL/AGPL/LGPL, EPL, SSPL, BUSL, FSL, Commons Clause. GitHub's
+  license API reports `NOASSERTION` for packages ranging from perfectly fine to
+  categorically unusable, so the API field is not a verdict.
+- A package needing an install script must be added to `onlyBuiltDependencies`
+  and justified in the PR. A postinstall script is the cheapest supply-chain
+  attack available.
+
+## Honesty rules
+
+These matter more than the code rules, because the project's positioning depends
+on them.
+
+- Do not describe a capability as working when it is planned. Use the roadmap.
+- Do not claim a benchmark result without the artifacts listed in the benchmark
+  policy.
+- When a limitation exists — no Windows sandbox, no Dev Containers in the IDE,
+  proprietary extensions unavailable — document it plainly rather than omitting it.
+- `ValidationResult.validator` must report the level that actually ran. Never
+  imply a parse that did not happen.

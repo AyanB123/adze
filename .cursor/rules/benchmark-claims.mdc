@@ -1,0 +1,82 @@
+---
+description: Evidence standard every Adze benchmark claim must meet
+globs: bench/**,docs/benchmarks/**
+---
+
+# Benchmark claims
+
+The benchmark policy was written before Adze produced a single number, so that it
+could not be adjusted to fit one. Treat it as a constraint on what may be
+published, not as guidance.
+
+Full reasoning: `docs/architecture/adr/0011-benchmark-harness.md`. Operational
+version: `docs/benchmarks/strategy.md`.
+
+## The two rules that cost us headlines
+
+- **No win claimed inside 3 percentage points.** Published work on infrastructure
+  noise in agent evaluation measured a 6-point gap (p < 0.01) between the
+  most- and least-resourced container configurations — larger than the gap
+  between top leaderboard models. Naive binomial intervals already span 1–2
+  points and infra confounders stack on top. A 2-point lead is not a win, and we
+  say so even when the 2 points are ours.
+- **No aggregator citations, ever.** A cluster of SEO leaderboard sites was found
+  publishing 96%, 96.4%, and 97.0% for the same model on the same benchmark whose
+  official leaderboard topped out at 79.20%. Acceptable sources are first-party
+  harnesses and leaderboards, and named independent evaluators with published
+  methodology. One polluted citation discredits an otherwise sound report.
+
+## Statistics
+
+- **`pass@1` is the metric.** Report **mean ± SEM over ≥3 attempts**. Never
+  max-over-N. Best-of-N is a separate, explicitly labelled mode and never a
+  headline number.
+- Report seeds and attempt count. A single-run number is not a result.
+- Report cost and tokens split **input / cached-input / output, with cache hit
+  rate**. Cache economics move effective cost by more than 10×, so omitting the
+  split makes a cost claim meaningless.
+- `solves per million completion tokens` is a headline metric, not a footnote.
+  The competitive claim is on the joint accuracy-and-cost curve.
+
+## Reporting format
+
+Reports go in `bench/reports/<date>-<suite>/` with `report.md`, `result.json`,
+`config.json`, `trajectories/`, and `audit.md`.
+
+- **`report.md` leads with limitations, not with the headline number.** If the
+  code writes the report, the limitations section is emitted first — this is a
+  property of the generator, not of the author's discipline.
+- **Publish trajectories for every trial, failures included.** Publishing
+  failures is the strongest available credibility signal, and a report that only
+  contains passes is not checkable.
+- Include a negative-results section: regressions, infra error rate, timeout
+  rate, malformed-edit rate.
+- Include container digests, resource floor *and* ceiling, pinned dated model
+  snapshots with effort level and temperature, the harness version tag, and the
+  exact invocation.
+- Include our own broken-task audit of the benchmark being reported on. Roughly a
+  third of the "hardest" tasks in circulation are broken rather than hard.
+- The Tier-1 SWE-bench smoke slice is a wiring check. **Its number is never
+  published.**
+
+## Leakage assertions are build failures
+
+Test-patch absence, gold-patch-field absence, future-git-history absence, and
+network isolation are asserted in CI and fail the build. They are not warnings and
+not a checklist item someone remembers. The two-container design — the agent
+commits, and only the diff crosses to a fresh verifier — is what makes most of
+these structural rather than policed.
+
+## Honesty about what a suite actually measures
+
+- Never describe a planned suite as producing numbers. `nep-bench` and
+  `index-bench` are roadmap items (M6); say so.
+- State the input distribution plainly. A suite run on synthetic edits measures
+  the applier, not model behavior, and the report must say which one it measured.
+- Do not describe a metric as "per model" when only one synthetic source of
+  inputs exists.
+
+## Isolation from product code
+
+Nothing under `bench/` may be imported by product code. Benchmark code must not
+influence what ships, or the benchmark stops measuring the product.

@@ -1,0 +1,96 @@
+---
+description: Commit format, DCO sign-off, changesets, and when an ADR is required
+alwaysApply: true
+---
+
+# Commits, sign-off, and ADRs
+
+Full detail: `CONTRIBUTING.md` and `docs/architecture/adr/README.md`.
+
+## Sign-off is required on every commit
+
+```bash
+git commit -s
+```
+
+That adds `Signed-off-by: Name <email>`, the Developer Certificate of Origin
+assertion. A commit without it does not merge.
+
+**There is no CLA and there will not be one.** A CLA broadly licenses your
+copyright to the project owner, which is what lets an owner relicense or close a
+project later — several well-funded projects in this exact category did that. A
+DCO asserts only that you have the right to submit the code under the existing
+license, and leaves copyright with you. Relicensing Adze later would require
+asking every contributor, which is the point. Do not propose adding a CLA as a
+convenience.
+
+## Conventional Commits
+
+```
+<type>(<scope>): <summary in the imperative, lowercase, no trailing period>
+
+<body: why, not what. The diff already says what.>
+
+Refs ADR-00NN.
+
+Signed-off-by: Name <email>
+```
+
+Types: `feat`, `fix`, `docs`, `perf`, `test`, `refactor`, `build`, `ci`, `chore`,
+`revert`.
+
+Scopes are package directory names plus a few cross-cutting ones:
+`protocol`, `core`, `providers`, `apply`, `retrieval`, `sandbox`, `plugin-sdk`,
+`mcp`, `cli`, `sdk`, `vscode`, `ide`, `hub`, `bench`, `docs`, `adr`, `ci`, `deps`.
+
+Write the body to explain **why the change is correct**, and record bugs found
+along the way — a bug discovered while writing tests is worth a paragraph,
+because that paragraph is the only place the reasoning survives. Prefer several
+narrowly scoped commits over one large one.
+
+### On Windows, write long messages to a file
+
+PowerShell mis-parses commit messages containing backticks or `${`. Write the
+message to a temp file and use `git commit -s -F <file>`.
+
+## Changesets
+
+Anything user-visible needs one:
+
+```bash
+pnpm changeset
+```
+
+That includes protocol changes, CLI flags, tool behavior, and public types.
+Internal refactors and test-only changes do not.
+
+## When an ADR is required
+
+Write one when the change:
+
+- alters a boundary between packages, or what a package is allowed to import;
+- changes the protocol in a way surfaces must adapt to;
+- adds an outbound network call, a new dependency with security surface, or a new
+  install script;
+- changes the permission model, the sandbox contract, or the applier's matching
+  or validation behavior;
+- changes what we publish as a benchmark claim;
+- **reverses an earlier decision.** A reversal gets its own ADR that supersedes
+  the old one; the old one is marked `Superseded by NNNN` and kept. Deleting the
+  record of a decision we changed our mind about is how a project loses the
+  ability to explain itself.
+
+An ADR states context with evidence, the decision, the alternatives that were
+rejected and why, consequences split into good/bad/costs-we-accept, and the
+condition that would justify revisiting it. Numbered sequentially in
+`docs/architecture/adr/`.
+
+Small changes that follow an existing ADR do not need a new one. Reference it:
+`Refs ADR-0005.`
+
+## Do not
+
+- Amend or force-push a branch under review; push a follow-up commit instead.
+- Bundle a refactor into a behavior change.
+- Claim a capability works in a commit body when it is scaffolded. Point at
+  `docs/roadmap.md` and name the milestone.
