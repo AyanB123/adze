@@ -1,0 +1,180 @@
+# Continuous integration.
+#
+# Gate for every pull request: lint, typecheck, test, build, license policy, and
+# the Tier-1 deterministic gate eval from ADR-0011.
+#
+# Action versions are major tags managed by Dependabot (.github/dependabot.yml).
+# Pinning to commit SHAs is the next hardening step and becomes mandatory before
+# any workflow is granted write permissions — see SECURITY.md.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Least privilege. No job here writes to the repository, publishes a package, or
+# needs an OIDC token, so nothing else is granted.
+permissions:
+  contents: read
+
+# A newer push to the same ref makes the older run's answer irrelevant.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Turborepo prints a static log rather than redrawing a TUI.
+  TURBO_UI: 'false'
+  DO_NOT_TRACK: '1'
+
+jobs:
+  # Biome is a native binary, so the Node version cannot change its verdict — but
+  # the OS can. This repository sets `lineEnding: lf` in biome.json while
+  # developing on Windows, so a CRLF checkout is a real way for formatting to
+  # diverge. Hence three operating systems, one Node version.
+  lint:
+    name: lint (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+        # No `version:` on purpose. With it omitted the action reads
+        # `packageManager` from the root package.json, which keeps the pnpm
+        # version in exactly one place.
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: biome check
+        run: pnpm lint
+
+  typecheck:
+    name: typecheck (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+
+  test:
+    name: test (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm test
+
+  build:
+    name: build (${{ matrix.os }}, node ${{ matrix.node }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+
+      # A published CLI that cannot start is a worse failure than a failing test,
+      # because it only shows up after install.
+      #
+      # Deliberately one step per command. On the Windows runner the shell is
+      # pwsh, and GitHub's wrapper only propagates the *last* command's
+      # $LASTEXITCODE — so `--version` failing inside a multi-command block would
+      # be silently masked by `doctor` succeeding.
+      - name: smoke the CLI — version
+        run: pnpm adze --version
+
+      - name: smoke the CLI — doctor
+        run: pnpm adze doctor
+
+  # Supply-chain policy: license allowlist from ADR-0012, extension gallery audit
+  # from ADR-0009. A denylisted license fails the build; a NOASSERTION result is
+  # reported for a human to resolve and does not fail, because the registry field
+  # is not a verdict.
+  #
+  # The gallery audit is here rather than only in the IDE release pipeline because
+  # ADR-0009 requires it to *gate the build*: recommendation maps inherited from
+  # the Microsoft Marketplace become recommendations for unclaimed namespaces when
+  # pointed at a different registry, which is the vector used against four
+  # commercial forks in late 2025. Until M4 there is no product.json to audit and
+  # the script says so and exits 0.
+  supply-chain:
+    name: supply chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm licenses:check
+      - run: pnpm gallery:audit
+
+  # Tier-1 gate eval per ADR-0011: deterministic, no model calls, no cost. The
+  # policy is that evaluation runs from the first pull request rather than being
+  # added once there is a number worth rationalizing.
+  gate-evals:
+    name: gate evals
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: apply-bench
+        run: pnpm bench:apply
+
+      - name: upload apply-bench report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: apply-bench-report
+          path: bench/.runs/
+          if-no-files-found: error
+          retention-days: 14

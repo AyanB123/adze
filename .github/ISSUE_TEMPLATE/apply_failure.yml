@@ -1,0 +1,162 @@
+name: Apply failure (edit corrupted or wrongly refused)
+description: A model's edit broke a file, or a valid edit was refused. This is the highest-leverage report in the repository.
+title: 'apply: '
+labels:
+  - 'apply-failure'
+  - 'bench:apply'
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Thank you. This is the most useful bug report Adze receives.**
+
+        The failure users actually feel is a mangled file, not a wrong answer. So a
+        report here is not just a bug — it becomes a **permanent case in
+        `bench/suites/apply-bench/cases/`**, which means it becomes regression
+        protection for every model Adze ever supports, and it feeds the per-model
+        per-tier apply success rate we publish.
+
+        Two kinds of failure are equally worth reporting:
+
+        - **Corruption** — the edit was applied and the file is now wrong. This is
+          the serious one. The applier is supposed to make this impossible.
+        - **Wrong refusal** — a correct, unambiguous edit was refused. Also a bug:
+          refusing valid edits makes the tool useless even though it is safe.
+
+        Needs no AI expertise. A case is an input file, an edit, and what should
+        have happened.
+
+        If the file you are reporting is proprietary, please reduce it to the
+        smallest snippet that still reproduces. A 20-line repro is more useful to
+        us than a 2,000-line one anyway.
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What went wrong
+      options:
+        - The edit was applied and corrupted the file
+        - A valid edit was refused
+        - The edit was applied to the wrong location
+        - Indentation was wrong after the edit
+        - Something else
+    validations:
+      required: true
+
+  - type: input
+    id: model
+    attributes:
+      label: Model
+      description: >-
+        Name and version as precisely as you can. A dated snapshot is ideal —
+        apply behavior differs measurably between snapshots of the same model, so
+        "the latest one" is not specific enough to reproduce.
+      placeholder: e.g. claude-opus-5-20260724, gpt-5.2-2026-06-11, qwen3-coder-480b
+    validations:
+      required: true
+
+  - type: input
+    id: language
+    attributes:
+      label: File extension
+      description: Determines which validator runs, so it changes the outcome.
+      placeholder: e.g. py, ts, go, rs
+    validations:
+      required: true
+
+  - type: textarea
+    id: original
+    attributes:
+      label: Original file content
+      description: >-
+        The file exactly as it was before the edit, including its indentation.
+        Whitespace is load-bearing here — please paste rather than retype, and do
+        not reformat it.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: edit
+    attributes:
+      label: The edit
+      description: >-
+        The search/replace blocks or whole-file replacement the model produced,
+        verbatim. If the model emitted several blocks, include all of them in
+        order: later blocks are matched against the result of earlier ones, and
+        that interaction is sometimes the bug.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: observed
+    attributes:
+      label: What actually happened
+      description: >-
+        For a corruption, the resulting file (or the relevant region of it). For a
+        refusal, the failure reason and message Adze printed.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What should have happened
+      description: >-
+        The correct resulting file, or "should have been refused with reason X".
+        A refusal is a legitimate expected outcome and several existing cases
+        assert exactly that.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: telemetry
+    attributes:
+      label: Telemetry (optional but very helpful)
+      description: >-
+        Output of `adze apply --json`, which reports the tier and match strategy
+        used plus the validator that actually ran. That tells us which of the four
+        match strategies misfired, which is usually most of the diagnosis.
+      render: json
+    validations:
+      required: false
+
+  - type: input
+    id: version
+    attributes:
+      label: Adze version
+      description: '`adze --version`, or a commit SHA if you are on a checkout.'
+    validations:
+      required: false
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      description: >-
+        Line endings differ, and CRLF versus LF has caused real matching bugs.
+      options:
+        - Windows
+        - macOS
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: consent
+    attributes:
+      label: Contribution
+      options:
+        - label: >-
+            I understand this report may be added verbatim as a permanent test
+            case in `bench/suites/apply-bench/cases/` and `packages/apply/test/`,
+            under the repository's Apache-2.0 license.
+          required: true
+        - label: >-
+            The content above contains no secrets, credentials, or proprietary
+            code I am not permitted to share.
+          required: true

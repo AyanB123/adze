@@ -1,0 +1,99 @@
+name: Bug report
+description: Something does not work the way it is documented to work.
+title: 'bug: '
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, two redirections that will get you a better answer faster:
+
+        - **A model edit broke a file, or a valid edit was refused?** Use the
+          [Apply failure](?template=apply_failure.yml) template instead. It
+          collects the specific fields needed to turn the report into a permanent
+          regression case.
+        - **A security problem?** Do not open an issue. See
+          [SECURITY.md](https://github.com/AyanB123/adze/blob/main/SECURITY.md)
+          for private reporting.
+
+        Adze is pre-1.0 and much of the roadmap is not built yet. If a command
+        tells you it is not implemented, that is
+        [docs/roadmap.md](https://github.com/AyanB123/adze/blob/main/docs/roadmap.md)
+        rather than a bug.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: Include the exact command and its full output.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected
+    validations:
+      required: true
+
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: >-
+        Numbered steps starting from a clean checkout or a fresh install. If it
+        only reproduces in a particular repository, say what is unusual about it —
+        size, submodules, symlinks, line endings.
+      value: |
+        1.
+        2.
+        3.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Adze version
+      description: '`adze --version`, or a commit SHA if you are on a checkout.'
+    validations:
+      required: true
+
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `adze doctor`
+      description: >-
+        Reports Node, platform, architecture, and whether pnpm, git, and ripgrep
+        resolve. Most environment bugs are visible in it immediately.
+      render: text
+    validations:
+      required: false
+
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Which surface
+      options:
+        - CLI
+        - VS Code extension
+        - Adze IDE
+        - Embedding the engine directly (@adze/sdk)
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues.
+          required: true
+        - label: >-
+            This is reproducible, or I have said clearly that it is intermittent.
+            An intermittent report is still worth filing — please just label it as
+            one so we do not chase a fix we cannot verify.
+          required: true

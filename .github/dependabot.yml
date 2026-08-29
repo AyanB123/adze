@@ -1,0 +1,98 @@
+# Dependency updates.
+#
+# Grouped and weekly on purpose. Ungrouped daily updates produce a stream of
+# single-line pull requests that get rubber-stamped, which is how a compromised
+# release gets merged without anyone reading it. One batched PR per ecosystem per
+# week is small enough to actually review.
+#
+# Known caveat, recorded rather than discovered later: this repository keeps every
+# dependency version in the `catalog:` block of `pnpm-workspace.yaml` and packages
+# reference it as `catalog:`. Dependabot's pnpm support reads the lockfile, so
+# verify against the first real PR that catalog entries are what gets rewritten.
+# If they are not, the honest fix is a small scheduled job that bumps the catalog,
+# not switching packages to inline versions — inline versions are exactly the
+# drift the catalog exists to prevent.
+
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 3
+    versioning-strategy: increase
+    labels:
+      - dependencies
+    commit-message:
+      # Matches the Conventional Commits scope list in CONTRIBUTING.md.
+      prefix: 'chore(deps)'
+      prefix-development: 'chore(deps)'
+    groups:
+      # Type definitions and linters cannot change runtime behavior, so batching
+      # them widely costs nothing and keeps the reviewable PRs separate.
+      dev-tooling:
+        applies-to: version-updates
+        patterns:
+          - '@biomejs/*'
+          - '@changesets/*'
+          - '@types/*'
+          - 'turbo'
+          - 'typescript'
+          - 'vitest'
+          - '@vitest/*'
+        update-types:
+          - minor
+          - patch
+      # These are the two dependencies whose behavior we are exposed to directly:
+      # zod defines the wire contract, and the AI SDK defines provider behavior.
+      # Kept in their own group so a bump is reviewed rather than skimmed.
+      contract-critical:
+        applies-to: version-updates
+        patterns:
+          - 'zod'
+          - 'ai'
+          - '@ai-sdk/*'
+          - '@modelcontextprotocol/*'
+      runtime:
+        applies-to: version-updates
+        patterns:
+          - '*'
+        exclude-patterns:
+          - '@biomejs/*'
+          - '@changesets/*'
+          - '@types/*'
+          - 'turbo'
+          - 'typescript'
+          - 'vitest'
+          - '@vitest/*'
+          - 'zod'
+          - 'ai'
+          - '@ai-sdk/*'
+          - '@modelcontextprotocol/*'
+    ignore:
+      # Node's own support window governs this, not the registry.
+      - dependency-name: '@types/node'
+        update-types:
+          - version-update:semver-major
+
+  - package-ecosystem: github-actions
+    directory: '/'
+    schedule:
+      interval: weekly
+      day: monday
+      time: '06:00'
+      timezone: Etc/UTC
+    open-pull-requests-limit: 2
+    labels:
+      - dependencies
+      - ci
+    commit-message:
+      prefix: 'ci(deps)'
+    groups:
+      actions:
+        patterns:
+          - '*'

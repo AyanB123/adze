@@ -1,0 +1,99 @@
+name: Feature request
+description: Propose a capability, or argue that a decision should be revisited.
+title: 'feat: '
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Two things worth knowing before you write, because they change what a
+        useful request looks like here.
+
+        **Much of this is already planned.** Check
+        [docs/roadmap.md](https://github.com/AyanB123/adze/blob/main/docs/roadmap.md)
+        first. The ordering there is a commitment even though the dates are absent.
+
+        **Some things are deliberately not built**, and the reasoning is written
+        down rather than implied — see
+        [what is deliberately not built](https://github.com/AyanB123/adze/blob/main/docs/architecture/README.md#10-what-is-deliberately-not-built)
+        and the [ADRs](https://github.com/AyanB123/adze/tree/main/docs/architecture/adr).
+        Arguing against one of those decisions is welcome and is not a lesser kind
+        of issue: each ADR ends with a "revisit when" section stating the evidence
+        that would change our mind. Point at it and we will take it seriously.
+
+        **You may not need us at all.** Adze has six plugin surfaces specifically
+        so that the answer to "can I change this?" is usually yes without a fork.
+        Adding a tool, changing what context the agent sees, blocking an action,
+        adding a workflow, swapping retrieval, or building a whole new surface all
+        work today or are specified in
+        [docs/plugins/spec.md](https://github.com/AyanB123/adze/blob/main/docs/plugins/spec.md).
+        If what you want genuinely requires changing the engine, say so — that is
+        useful information about the extension points.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >-
+        What you were trying to do and what stopped you. Please describe the
+        situation rather than the solution — the underlying problem is what we can
+        judge alternatives against.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you would like
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: >-
+        Including workarounds you tried. A workaround that almost works is strong
+        evidence about where the real gap is.
+    validations:
+      required: false
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of Adze
+      options:
+        - Engine (@adze/core)
+        - Protocol (@adze/protocol)
+        - Edit applier (@adze/apply)
+        - Retrieval (@adze/retrieval)
+        - Providers / models
+        - Sandbox and permissions
+        - CLI
+        - VS Code extension
+        - Adze IDE
+        - Plugins
+        - Benchmarks
+        - Docs
+        - Not sure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: adr
+    attributes:
+      label: Scope
+      options:
+        - label: >-
+            I checked the roadmap and this is not already a planned milestone.
+          required: true
+        - label: >-
+            This would need an outbound network call, and I have said so above.
+            Local-first is a product promise, so a new network call needs an ADR
+            rather than an implementation.
+          required: false
+        - label: >-
+            This contradicts an existing ADR, and I have named which one and which
+            part of its "revisit when" section applies.
+          required: false

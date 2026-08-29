@@ -1,0 +1,22 @@
+# Blank issues are disabled so that the apply-failure path is discoverable. The
+# structured template exists because an unstructured "the edit broke my file"
+# report usually omits the original file's exact whitespace, which is the one
+# field the case cannot be reconstructed without.
+blank_issues_enabled: false
+
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/AyanB123/adze/security/advisories/new
+    about: Report privately. Never in a public issue — see SECURITY.md for what to include and what response to expect.
+
+  - name: Question or idea
+    url: https://github.com/AyanB123/adze/discussions
+    about: Usage questions, architecture debates, and anything you are not sure is a bug.
+
+  - name: Roadmap
+    url: https://github.com/AyanB123/adze/blob/main/docs/roadmap.md
+    about: Adze is pre-1.0 and a lot is not built yet. Check here before filing a missing-feature issue.
+
+  - name: Architecture decision records
+    url: https://github.com/AyanB123/adze/tree/main/docs/architecture/adr
+    about: Why things are the way they are, including the alternatives that were rejected and the evidence that would justify revisiting each decision.
