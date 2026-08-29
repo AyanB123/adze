@@ -276,4 +276,55 @@ describe('applyEdit — telemetry', () => {
     expect(r.telemetry.tiersAttempted).toBeGreaterThan(0);
     expect(r.telemetry.editCount).toBe(1);
   });
+
+  it('attributes a refusal to the tier that diagnosed it, not the last tier tried', async () => {
+    // Tier 1 diagnoses `ambiguous`. Tier 2 then runs, has no replacement, and
+    // reports `tier-unavailable` — which is correctly discarded in favour of the
+    // substantive reason. But the reported tier used to be taken from whichever
+    // tier ran last, so an ambiguity found by search-replace was attributed to
+    // whole-file.
+    //
+    // That matters beyond tidiness: `tier` plus `strategy` is what produces the
+    // per-tier breakdown in apply-bench, so the bug moved every tier-1 refusal
+    // into the tier-2 column and made the published metric wrong in a way no
+    // individual test would have noticed. ApplyTelemetry documents `tier` as the
+    // tier that produced the result, and on a refusal the result is the diagnosis.
+    const r = await applyEdit(
+      req({
+        original: 'let x = 1;\nlet x = 1;\n',
+        edits: [{ search: 'let x = 1;', replace: 'const x = 1;' }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('ambiguous');
+    expect(r.telemetry.tier).toBe('search-replace');
+    // Both tiers really were attempted, and that stays visible.
+    expect(r.telemetry.tiersAttempted).toBe(2);
+  });
+
+  it('attributes a parse-broken refusal to the tier whose output failed to parse', async () => {
+    const r = await applyEdit(
+      req({
+        original: 'const a = 1;\n',
+        edits: [{ search: 'zzz', replace: 'x' }],
+        replacement: 'function f() {\n',
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('parse-broken');
+    expect(r.telemetry.tier).toBe('whole-file');
+  });
+
+  it('keeps reporting the failing tier when only one tier is configured', async () => {
+    const r = await applyEdit(
+      req({ original: 'const a = 1;\n', edits: [{ search: 'zzz', replace: 'x' }] }),
+      { tiers: ['whole-file'] },
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('tier-unavailable');
+    expect(r.telemetry.tier).toBe('whole-file');
+  });
 });

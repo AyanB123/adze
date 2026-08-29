@@ -226,6 +226,15 @@ export async function applyEdit(
 
   let tiersAttempted = 0;
   let lastFailure: Extract<TierOutcome, { kind: 'fail' }> | undefined;
+  /**
+   * The tier that produced `lastFailure`. Tracked alongside it rather than taken
+   * from whichever tier ran last, because on a refusal the *result* is the
+   * diagnosis, and `ApplyTelemetry.tier` documents itself as the tier that
+   * produced the result. Reading the last tier instead moved every tier-1 refusal
+   * into the tier-2 column of the per-tier breakdown in apply-bench, which made a
+   * published metric wrong in a way no single-tier test would surface.
+   */
+  let lastFailureTier: ApplyTier | undefined;
   let lastValidation: ValidationResult | undefined;
   let lastTier: ApplyTier = tiers[0] ?? 'search-replace';
 
@@ -235,9 +244,13 @@ export async function applyEdit(
    * must not mask a real diagnosis like `ambiguous` from an earlier tier — that
    * message is what the model needs in order to retry usefully.
    */
-  const recordFailure = (outcome: Extract<TierOutcome, { kind: 'fail' }>): void => {
+  const recordFailure = (
+    outcome: Extract<TierOutcome, { kind: 'fail' }>,
+    tier: ApplyTier,
+  ): void => {
     if (lastFailure === undefined || outcome.reason !== 'tier-unavailable') {
       lastFailure = outcome;
+      lastFailureTier = tier;
     }
   };
 
@@ -248,7 +261,7 @@ export async function applyEdit(
 
     const outcome = await runTier(tier, request, options, maxBytes);
     if (outcome.kind === 'fail') {
-      recordFailure(outcome);
+      recordFailure(outcome, tier);
       continue;
     }
 
@@ -260,7 +273,7 @@ export async function applyEdit(
     lastValidation = validation;
 
     if (!validation.ok) {
-      recordFailure(parseBrokenFailure(tier, validation));
+      recordFailure(parseBrokenFailure(tier, validation), tier);
       continue;
     }
 
@@ -280,7 +293,7 @@ export async function applyEdit(
   }
 
   const telemetry: ApplyTelemetry = {
-    tier: lastTier,
+    tier: lastFailureTier ?? lastTier,
     validation: lastValidation ?? {
       ok: false,
       validator: 'none',
