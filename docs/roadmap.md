@@ -8,6 +8,54 @@ Progress is tracked in [GitHub milestones](https://github.com/AyanB123/adze/mile
 
 ---
 
+## Where the code actually is
+
+Verified 2026-08-29 by running each package's typecheck, test suite, and linter
+independently, then rebuilding every package from committed source and
+re-checking so that cross-package types resolve against freshly generated
+declarations rather than stale build output.
+
+| Package | State | Evidence |
+| --- | --- | --- |
+| `@adze/protocol` | Landed | typecheck clean · 72 tests · lint clean |
+| `@adze/core` | Landed | typecheck clean · 290 tests · lint clean |
+| `@adze/apply` | Landed | typecheck clean · 63 tests · lint clean |
+| `@adze/providers` | Landed | typecheck clean · 130 tests · lint clean |
+| `@adze/retrieval` | Landed, vectors deferred | typecheck clean · 250 tests, 2 skipped · lint clean |
+| `@adze/cli` | Landed | typecheck clean · 99 tests · lint clean |
+| `@adze/mcp` | **In progress** | no committed source yet |
+| `apps/vscode` | **In progress** | no committed source yet |
+| `@adze/sandbox` | **Empty** | no source, no containment anywhere |
+| `@adze/plugin-sdk` | **Empty** | plugin surfaces are specified, not built |
+| `@adze/sdk` | **Empty** | surfaces import `core` directly for now |
+
+904 tests pass across the six landed packages, with zero lint errors and zero
+lint warnings. The two skipped tests are conditional on tree-sitter grammar
+binaries being present, and are skipped when they are not.
+
+### Three gaps stated plainly
+
+These are the claims a reader is most likely to assume in our favour, so they are
+recorded here rather than left to be discovered.
+
+1. **There is no OS-level sandbox containment on any platform.** Not on Windows,
+   and not on macOS or Linux either. `@adze/sandbox` contains no code. What
+   exists today is the permission gate and the approval policy inside
+   `@adze/core`, which every tool call does pass through — but an approved
+   command runs unconfined on every platform. `adze doctor` and `adze run` both
+   report this at runtime.
+2. **No benchmark result has been published.** `apply-bench` runs and passes its
+   50 cases, but that suite measures the applier against hand-written edits. It
+   is not a measurement of any model, and its number is not a published result.
+   Nothing has been run against SWE-rebench or Terminal-Bench.
+3. **No live end-to-end run has been verified against a real model.** The path
+   from prompt through the turn machine to a provider HTTP request is exercised
+   and its failure handling is verified, but nobody has yet watched
+   `adze run` complete a task with a valid API key. Until someone has, M1's exit
+   criterion is unmet.
+
+---
+
 ## Sequencing logic
 
 Two constraints set the order.
@@ -49,41 +97,54 @@ from whatever got built.
 
 ---
 
-## M1 — Engine and CLI
+## M1 — Engine and CLI — substantially complete, exit criterion unmet
 
 **Goal: `adze "fix the failing test"` works end to end in a real repository.**
 
-| Deliverable | Notes |
-| --- | --- |
-| `@adze/protocol` | JSON-RPC types, Zod schemas, version negotiation |
-| `@adze/apply` | All three tiers, parse validation, per-attempt telemetry |
-| `@adze/core` | Turn machine, tool registry, permission gate, context assembler |
-| `@adze/providers` | Anthropic, OpenAI, OpenAI-compatible; cache-aware cost accounting |
-| `@adze/retrieval` | ripgrep + tree-sitter symbols. Vectors deferred. |
-| `@adze/sandbox` | Two-axis gate; macOS/Linux containment; Windows gate-only with a startup warning |
-| `@adze/cli` | `adze run`, `adze chat`, `adze apply`, `adze doctor` |
-| `bench/suites/apply-bench` | Tier-1 gate eval, running in CI |
+Every deliverable below has landed except the sandbox. The goal above has *not*
+been demonstrated, because no one has yet run the CLI to completion against a
+real model with a valid key. The milestone therefore stays open.
+
+| Deliverable | State | Notes |
+| --- | --- | --- |
+| `@adze/protocol` | ✅ Landed | JSON-RPC types, Zod schemas, version negotiation |
+| `@adze/apply` | ✅ Landed | All three tiers, parse validation, per-attempt telemetry |
+| `@adze/core` | ✅ Landed | Turn machine, tool registry, permission gate, epoch context assembler |
+| `@adze/providers` | ✅ Landed | Anthropic, OpenAI, OpenAI-compatible; cache-aware cost accounting |
+| `@adze/retrieval` | ✅ Landed | ripgrep + tree-sitter symbols + RRF fusion. Vectors deferred. |
+| `@adze/sandbox` | ❌ Not started | No code. No OS containment on any platform; the gate is all that exists. |
+| `@adze/cli` | ✅ Landed | `run`, `chat`, `apply`, `validate`, `doctor`, `models` |
+| `bench/suites/apply-bench` | ✅ Landed | 50/50 cases pass; wired into CI |
 
 **Done when:** the CLI completes a multi-step task in a real repository, every
 tool call passes the gate, and `apply-bench` runs on every PR.
 
+Of those three, the second and third hold. The first is unverified — that is the
+one thing standing between M1 and closed, and it needs a human with an API key
+rather than more code.
+
 **Explicitly deferred:** TUI (plain output first keeps it scriptable), vector
-search, plugins, subagents.
+search, plugins. Subagents are partly here — the built-in `task` tool and the
+subagent runner are implemented in `@adze/core`; what M3 adds is the
+*plugin-declared* subagent surface.
 
 ---
 
-## M2 — Extension and MCP
+## M2 — Extension and MCP — started
 
 **Goal: installable from Open VSX and the Marketplace; MCP works both directions.**
 
-| Deliverable | Notes |
-| --- | --- |
-| `apps/vscode` | Chat sidebar, inline diff via decorations, engine in-process |
-| `@adze/mcp` client | stdio + Streamable HTTP; MCP servers as tools |
-| `@adze/mcp` server | **Adze addressable by other agents.** Cheap, and makes Adze useful to people who will not switch tools. |
-| Plugin surfaces 1–3 | Tools, context providers, slash commands |
-| Config system | `.adze/config.jsonc`, `AGENTS.md` conventions |
-| Ghost text | `InlineCompletionItemProvider` — stable public API |
+Work on `apps/vscode` and `@adze/mcp` is underway. Neither has committed source
+yet, so nothing in this milestone is usable.
+
+| Deliverable | State | Notes |
+| --- | --- | --- |
+| `apps/vscode` | 🚧 In progress | Chat sidebar, inline diff via decorations, engine in-process |
+| `@adze/mcp` client | 🚧 In progress | stdio + Streamable HTTP; MCP servers as tools |
+| `@adze/mcp` server | 🚧 In progress | **Adze addressable by other agents.** Cheap, and makes Adze useful to people who will not switch tools. |
+| Plugin surfaces 1–3 | ⬜ Not started | Tools, context providers, slash commands |
+| Config system | ⬜ Not started | `.adze/config.jsonc`, `AGENTS.md` conventions |
+| Ghost text | ⬜ Not started | `InlineCompletionItemProvider` — stable public API |
 
 **Done when:** published to both galleries, and an MCP server from the existing
 ecosystem works with no Adze-specific code.

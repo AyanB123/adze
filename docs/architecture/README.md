@@ -3,6 +3,16 @@
 This document describes how Adze is put together and why. It is the map; the
 [ADRs](adr/) are the reasoning behind individual turns in the road.
 
+> [!NOTE]
+> **This document describes the intended architecture, and some of it is not built
+> yet.** As of 2026-08-29 the protocol, engine, applier, provider gateway,
+> retrieval, and CLI are committed and their suites pass. The sandbox, plugin
+> host, MCP client and server, SDK, and every surface other than the CLI are not.
+> Sections below flag the gap where it exists, and [the roadmap](../roadmap.md)
+> carries the authoritative per-package status. Two things worth knowing before
+> reading further: **there is no OS-level sandbox containment on any platform**,
+> and **the performance targets in §9 have not been measured**.
+
 - [1. Design goals](#1-design-goals)
 - [2. The one structural decision that matters](#2-the-one-structural-decision-that-matters)
 - [3. System layers](#3-system-layers)
@@ -85,7 +95,7 @@ to one surface.
 ```mermaid
 graph TB
     subgraph S["Surfaces — own their UI, own nothing else"]
-        CLI["adze CLI + TUI"]
+        CLI["adze CLI<br/>(plain text; TUI deferred)"]
         EXT["VS Code / Cursor extension"]
         IDE["Adze IDE<br/>(Code-OSS patch series)"]
         API["HTTP / WS daemon"]
@@ -108,9 +118,9 @@ graph TB
     subgraph SVC["Service packages — swappable"]
         PROV["@adze/providers<br/>model gateway"]
         APPLY["@adze/apply<br/>3-tier edit applier"]
-        RETR["@adze/retrieval<br/>ripgrep · tree-sitter · vectors"]
-        SAND["@adze/sandbox<br/>per-OS brokers"]
-        MCPC["@adze/mcp<br/>MCP client"]
+        RETR["@adze/retrieval<br/>ripgrep · tree-sitter<br/>(vectors deferred)"]
+        SAND["@adze/sandbox<br/>per-OS brokers<br/>(not built)"]
+        MCPC["@adze/mcp<br/>MCP client<br/>(in progress)"]
     end
 
     CLI --> WIRE
@@ -173,18 +183,28 @@ graph LR
 | Only surfaces import `sdk` | `sdk` is the public embedding API and its stability guarantees differ |
 | Nothing imports `bench` | Benchmark code must not influence product code |
 
-| Package | Responsibility | Stability |
-| --- | --- | --- |
-| `@adze/protocol` | Wire types, Zod schemas, JSON Schema codegen, version negotiation | Semver-strict from 0.2 |
-| `@adze/core` | Sessions, turn machine, tool registry, permission gate, context assembly, plugin host | Semver-strict from 1.0 |
-| `@adze/providers` | Model routing, streaming, token and cost accounting, cache-aware pricing | Internal |
-| `@adze/apply` | Three-tier edit application with parse validation | Semver-strict from 0.2 |
-| `@adze/retrieval` | ripgrep, tree-sitter symbols, local vectors, hybrid ranking | Internal |
-| `@adze/sandbox` | Per-OS containment, `writableRoots`, command policy | Internal |
-| `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec |
-| `@adze/plugin-sdk` | Manifest schema, hook bus, WASM host, authoring types | Semver-strict from 0.2 |
-| `@adze/cli` | `adze` binary and TUI | User-facing |
-| `@adze/sdk` | Public embedding API | Semver-strict from 1.0 |
+| Package | Responsibility | Stability | Built? |
+| --- | --- | --- | --- |
+| `@adze/protocol` | Wire types, Zod schemas, JSON Schema codegen, version negotiation | Semver-strict from 0.2 | ✅ |
+| `@adze/core` | Sessions, turn machine, tool registry, permission gate, context assembly, plugin host | Semver-strict from 1.0 | ✅ except plugin host |
+| `@adze/providers` | Model routing, streaming, token and cost accounting, cache-aware pricing | Internal | ✅ |
+| `@adze/apply` | Three-tier edit application with parse validation | Semver-strict from 0.2 | ✅ |
+| `@adze/retrieval` | ripgrep, tree-sitter symbols, hybrid RRF ranking; local vectors deferred | Internal | ✅ except vectors |
+| `@adze/sandbox` | Per-OS containment, `writableRoots`, command policy | Internal | ❌ no code |
+| `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec | 🚧 in progress |
+| `@adze/plugin-sdk` | Manifest schema, hook bus, WASM host, authoring types | Semver-strict from 0.2 | ❌ no code |
+| `@adze/cli` | `adze` binary; plain text, TUI deferred | User-facing | ✅ |
+| `@adze/sdk` | Public embedding API | Semver-strict from 1.0 | ❌ no code |
+
+Because `@adze/sdk` does not exist yet, the CLI imports `@adze/core`,
+`@adze/providers`, `@adze/apply`, and `@adze/protocol` directly. That is a
+temporary deviation from the graph above, not a revision of it.
+
+Cross-package types resolve through each package's built `dist/` output, which is
+gitignored. A dependency must therefore be built before a dependent can be
+typechecked or tested; the turbo task graph declares `dependsOn: ["^build"]` for
+both tasks so this is handled, but a bare `tsc` in a package directory on a fresh
+clone will fail until its dependencies are built.
 
 ---
 
@@ -313,6 +333,8 @@ Tier 3  pluggable fast-apply provider      optional, never a hard dependency
 Every attempt is recorded: tier used, match strategy, whether parse validation
 passed, retry count. That record is what makes **apply success rate per model per
 tier** a publishable metric — see [ADR-0005](adr/0005-edit-application.md).
+No such number has been published yet: the `apply-bench` suite that runs today
+uses hand-written edits and measures the applier, not any model.
 
 Parse validation degrades honestly. With tree-sitter grammars present it is a
 real parse. Without them it falls back to a structural balance check (delimiters,
@@ -325,16 +347,23 @@ holds on a fresh clone.
 Hybrid, local, and cheap-first:
 
 1. **ripgrep** for literal and regex. Nothing beats it, and most lookups are
-   lexical.
+   lexical. *Implemented.*
 2. **tree-sitter** for symbols, definitions, and structure-aware chunk
-   boundaries.
-3. **Local vectors** (LanceDB) for semantic similarity — *optional* and off by
-   default until a workspace is indexed.
+   boundaries. *Implemented.* Symbol extraction needs grammar binaries present;
+   without them the symbol signal reports itself as unavailable rather than
+   returning nothing silently.
+3. **Local vectors** (LanceDB) for semantic similarity. **Not implemented.**
+   `VectorIndex` is an interface with no built-in implementation, the package
+   pulls in no embedding dependency, and requesting semantic retrieval returns a
+   diagnostic that distinguishes "not implemented" from "not indexed" instead of
+   quietly returning nothing.
+
+The two implemented signals are fused with reciprocal rank fusion.
 
 Ordering matters: agentic grep plus symbol lookup outperforms vector search on
 most repositories, which is why the strongest agents lean on tools rather than
 indexes. Embeddings are a supplement for "find the thing I can't name", not the
-primary path.
+primary path — which is also why they are the part that was deferred.
 
 Everything runs on the machine. Remote embedding is a configuration a user can
 choose, never a default. See [ADR-0006](adr/0006-retrieval.md).
@@ -358,13 +387,32 @@ Two orthogonal axes, because collapsing them is what produces approval fatigue:
 Plus command-prefix rules (`allow` / `prompt` / `forbid`) so a specific command
 can be permitted without widening the whole boundary.
 
-Per-OS implementation, stated honestly: macOS via Seatbelt, Linux via
-bubblewrap, **Windows has no OS-level containment yet** — the gate and policy
-still apply but there is no kernel-level boundary. This is a gap across the
-entire OSS agent ecosystem and it is on the roadmap as a differentiator rather
-than a footnote. [ADR-0007](adr/0007-sandbox-and-permissions.md).
+**The gate is implemented; the containment is not.** The two-axis model above,
+the approval flow, and the command-prefix rules live in `@adze/core`, and every
+tool call passes through them with no code path around it. `@adze/sandbox`
+contains no code, so there is **no OS-level containment on any platform** —
+macOS Seatbelt and Linux bubblewrap are planned backends that have not been
+written, and Windows has no mature OSS option at all.
+
+The practical consequence, which the CLI states at runtime rather than leaving in
+a document: a command that the gate approves runs unconfined. The gate decides
+*whether* a command runs; nothing currently constrains what it touches once it
+does. An approval should be treated as equivalent to running the command
+yourself.
+
+The Windows half of this is a gap across the entire OSS agent ecosystem and is on
+the roadmap as a differentiator rather than a footnote. The macOS and Linux half
+is simply not done yet.
+[ADR-0007](adr/0007-sandbox-and-permissions.md).
 
 ### 6.5 Plugin host
+
+**Not built.** `@adze/plugin-sdk` contains no code and `@adze/core` has no plugin
+host or hook bus yet. The six surfaces below are a specification, written before
+the implementation on purpose — the extension points are not validated until real
+plugins hit a wall, and the spec is what makes that wall findable. The hook
+arrows in the §5 turn diagram describe the intended flow, not code that runs
+today.
 
 Six surfaces, shipping in this order:
 
@@ -384,19 +432,20 @@ without a fork. [ADR-0008](adr/0008-plugin-architecture.md),
 
 ### 6.6 Surfaces
 
-**CLI** — engine in-process for startup latency. Plain-text output first, TUI as
-a layer on top, so Adze stays scriptable and CI-usable.
+**CLI** — engine in-process for startup latency. Plain-text output only; the TUI
+is deferred so Adze stays scriptable and CI-usable. This is the one surface that
+exists today.
 
-**VS Code / Cursor extension** — ships first and reaches users where they already
-are, including Cursor's own users, with no build pipeline and no legal exposure.
-Publishing an extension *to* the Marketplace is explicitly permitted; consuming
-the Marketplace from a fork is not.
+**VS Code / Cursor extension** — in progress. Ships first and reaches users where
+they already are, including Cursor's own users, with no build pipeline and no
+legal exposure. Publishing an extension *to* the Marketplace is explicitly
+permitted; consuming the Marketplace from a fork is not.
 
-**Adze IDE** — a patch series over a pristine upstream Code-OSS checkout, never a
-merged vendored fork. Measured churn drove this: the extension points we build on
-saw ~0 commits over 5.8 months, while `product.json` and the workbench
-registry saw ~30 each and upstream's own inline-chat directory saw 67. So we
-register *alongside* upstream instead of patching it, and we keep our agent
+**Adze IDE** — not started. A patch series over a pristine upstream Code-OSS
+checkout, never a merged vendored fork. Measured churn drove this: the extension
+points we build on saw ~0 commits over 5.8 months, while `product.json` and the
+workbench registry saw ~30 each and upstream's own inline-chat directory saw 67.
+So we register *alongside* upstream instead of patching it, and we keep our agent
 behind upstream's Agent Host Protocol rather than rebuilding chat UI that
 upstream now maintains and ships weekly.
 [ADR-0010](adr/0010-ide-fork-strategy.md).
@@ -406,6 +455,12 @@ upstream now maintains and ships weekly.
 ## 7. Extension points
 
 Ranked by how much you can change without forking.
+
+**This table describes the design target, not today's capability.** Of the rows
+below, only "use a different model" (provider config) and "build a new surface"
+(against `@adze/core` and `@adze/protocol`, since `@adze/sdk` is empty) are
+available now. Everything routed through a plugin or an MCP server needs the
+plugin host and `@adze/mcp`, neither of which is built.
 
 | I want to... | Do this | Fork needed? |
 | --- | --- | --- |
@@ -460,6 +515,14 @@ prompt injection.** We claim that a successful injection still cannot execute an
 unapproved command, because everything crosses the same gate and the gate answers
 to user configuration rather than to model output.
 
+Two of the three enforcement boxes above are not implemented. The **permission
+gate** is real and every tool call passes through it. The **OS sandbox** does not
+exist on any platform, and **WASM isolation** does not exist because there is no
+plugin host to isolate. So the keepable claim today is narrower still: an
+injection cannot get a command *approved*, but an approved command is not confined
+once it runs. The diagram shows the intended defence in depth; presently only its
+first layer is built.
+
 Credentials live in the model gateway. They are never placed in model context,
 tool arguments, or trajectory logs, and artifacts are scrubbed before write.
 
@@ -469,16 +532,22 @@ tool arguments, or trajectory logs, and artifacts are scrubbed before write.
 
 Requirements, not aspirations. Each gets a benchmark in `bench/suites`.
 
-| Metric | Target | Measured by |
+**None of these have been measured.** The only suite that runs today is
+`apply-bench`, and it measures correctness rather than latency. Every number below
+is a target with no observation behind it yet, and the `bench:latency`,
+`bench:retrieval`, and `bench:index` suites named in the right-hand column do not
+exist. Treat the column as a plan for how each will be measured.
+
+| Metric | Target | Will be measured by |
 | --- | --- | --- |
-| CLI cold start to first token | < 400 ms | `bench:latency` |
-| Engine attach (IDE sidecar) | < 150 ms | `bench:latency` |
-| `grep` on a 100k-file repo | < 250 ms | `bench:retrieval` |
-| Cold symbol index, 100k files | < 60 s | `bench:index` |
-| Incremental re-index on save | < 50 ms | `bench:index` |
-| Tier-1 apply | < 10 ms | `bench:apply` |
-| Prompt cache hit rate, steady state | > 85 % | trajectory logs |
-| Engine idle RSS | < 120 MB | `bench:latency` |
+| CLI cold start to first token | < 400 ms | `bench:latency` *(not built)* |
+| Engine attach (IDE sidecar) | < 150 ms | `bench:latency` *(not built)* |
+| `grep` on a 100k-file repo | < 250 ms | `bench:retrieval` *(not built)* |
+| Cold symbol index, 100k files | < 60 s | `bench:index` *(not built)* |
+| Incremental re-index on save | < 50 ms | `bench:index` *(not built)* |
+| Tier-1 apply | < 10 ms | `bench:apply` *(runs; latency not yet reported)* |
+| Prompt cache hit rate, steady state | > 85 % | trajectory logs *(no live run yet)* |
+| Engine idle RSS | < 120 MB | `bench:latency` *(not built)* |
 
 Cache hit rate is on this list because it is a cost metric disguised as a
 performance metric, and cost per task is the axis where an open-source tool can
