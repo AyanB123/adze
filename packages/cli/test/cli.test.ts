@@ -219,7 +219,7 @@ describe('adze — top level', () => {
     const io = capture();
     const code = await run(argv('--help'), io);
     expect(code).toBe(EXIT.Ok);
-    for (const command of ['apply', 'validate', 'doctor', 'chat', 'run']) {
+    for (const command of ['apply', 'validate', 'doctor', 'chat', 'run', 'models']) {
       expect(io.stdout()).toContain(command);
     }
   });
@@ -238,26 +238,11 @@ describe('adze — top level', () => {
 });
 
 describe('adze — commands that are not built yet', () => {
-  it('says plainly that chat is not implemented and points at the roadmap', async () => {
-    // The alternative is an obscure failure, or worse a fake prompt. Neither is
-    // acceptable: a planned capability must never read as a working one.
-    const io = capture();
-    const code = await run(argv('chat'), io);
-
-    expect(code).toBe(EXIT.NotImplemented);
-    expect(io.stderr()).toContain('not implemented yet');
-    expect(io.stderr()).toContain('docs/roadmap.md');
-    expect(io.stderr()).toContain('M1');
-    // And it says what does work, so the message is useful rather than only honest.
-    expect(io.stderr()).toContain('adze apply');
-  });
-
-  it('does the same for run, and tolerates extra arguments', async () => {
-    const io = capture();
-    const code = await run(argv('run', 'fix the failing test', '--model', 'whatever'), io);
-
-    expect(code).toBe(EXIT.NotImplemented);
-    expect(io.stderr()).toContain('not implemented yet');
-    expect(io.stderr()).toContain('docs/roadmap.md');
+  it('has none left in this package', () => {
+    // `chat` and `run` used to live here. They are wired now, and their behaviour is
+    // asserted in agent.test.ts. This placeholder stays as the reminder that the honest
+    // `notImplemented` shape is the right answer for the next planned command, rather than
+    // letting one fail with a module resolution error.
+    expect(EXIT.NotImplemented).toBe(3);
   });
 });

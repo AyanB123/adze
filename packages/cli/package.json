@@ -27,7 +27,9 @@
   },
   "dependencies": {
     "@adze/apply": "workspace:*",
+    "@adze/core": "workspace:*",
     "@adze/protocol": "workspace:*",
+    "@adze/providers": "workspace:*",
     "commander": "catalog:",
     "picocolors": "catalog:"
   },
