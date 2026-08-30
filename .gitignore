@@ -47,3 +47,12 @@ bench/reports/**/raw/
 *.log
 npm-debug.log*
 pnpm-debug.log*
+
+# Scratch files and backups. These are the residue of working on the repo —
+# a hand-saved copy of a file before regenerating it, a throwaway script written
+# to confirm a snippet in the docs actually runs. Committing one is always an
+# accident, and a stale `pnpm-lock.yaml.bak` sitting next to the real lockfile is
+# actively confusing to the next reader.
+*.bak
+scratch-*
+*.tmp.mjs
