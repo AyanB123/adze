@@ -1,0 +1,83 @@
+Subject: [PATCH 0006] product: declare the Adze-specific product.json keys
+Refs: ADR-0010
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix.
+
+INTENT
+======
+
+Add the `adze` key to upstream's `IProductConfiguration` interface so that our
+workbench contribution can read it through `IProductService` under
+`strictNullChecks` without a cast.
+
+The delta writes this object (apps/ide/branding/product.delta.jq):
+
+  "adze": {
+    "agentHostProtocolVersion": "1",
+    "engineChannel": "in-process",
+    "updateFeedKind": "static-json"
+  }
+
+Namespaced under one key on purpose: a single object cannot collide with any future
+upstream key, whereas three top-level keys are three chances to collide, and a
+collision would be resolved silently by whichever assignment ran last.
+
+FILES
+=====
+
+  src/vs/base/common/product.ts
+
+The type declaration only. Patch 0004 may extend the extensionsGallery member of
+the same interface with an "is this gallery signed" flag; if both patches land,
+they touch the same file and should be generated together or ordered so that 0006
+runs first.
+
+WHY A PATCH AND NOT A DECLARATION MERGE
+=======================================
+
+A separate .d.ts in our own directory using declaration merging would keep this out
+of upstream's tree, which is the pattern the rest of the fork follows.
+
+It does not work here. IProductConfiguration is exported from a module rather than
+declared globally, and interface merging across module boundaries requires a
+`declare module` augmentation whose specifier is a relative path from a file inside
+upstream's own compilation — which is a patch to upstream's tree with extra steps
+and a worse failure mode when the path moves.
+
+Six added lines in one low-churn file is the cheaper answer. `product.ts` did not
+appear in ADR-0010's churn table because it is not a hotspot; the frozen
+`productService.ts` next to it measured zero commits in 5.8 months.
+
+RISK
+====
+
+Low. Additive lines inside an interface body conflict only when upstream edits the
+same region, and the failure mode of a stale patch here is a TypeScript error
+naming the exact file and line — the most diagnosable failure in the series.
+
+HOW TO WRITE IT
+===============
+
+  1. Fetch the checkout.
+  2. Add to IProductConfiguration:
+
+       readonly adze?: {
+         readonly agentHostProtocolVersion: string;
+         readonly engineChannel: 'in-process' | 'daemon';
+         readonly updateFeedKind: 'static-json';
+       };
+
+     Optional, and `readonly` throughout, matching the surrounding style.
+  3. Keep it in sync with the delta. The type and the generated document are two
+     halves of one contract, and nothing checks that they agree — a mismatch is a
+     runtime undefined, not a compile error, because the key is optional.
+  4. git -C apps/ide/vscode diff adze/pristine -- src/vs/base/common/product.ts \
+       > apps/ide/patches/0006-product-service-type-additions.patch
+
+Point 3 is the one that will actually bite. Consider adding an assertion to
+apps/ide/scripts/verify-product-delta.sh that the generated `adze` object has
+exactly the keys this patch declares.

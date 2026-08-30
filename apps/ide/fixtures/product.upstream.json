@@ -1,0 +1,126 @@
+{
+  "$comment": [
+    "A deliberately small stand-in for upstream's product.json, used to verify",
+    "apps/ide/branding/product.delta.jq without cloning microsoft/vscode.",
+    "",
+    "It is not a copy of upstream's file and is not trying to be. It contains one",
+    "representative of each shape the delta has to handle correctly:",
+    "",
+    "  * keys the delta overrides (nameShort, applicationName, win32x64AppId)",
+    "  * keys the delta deletes (aiConfig, msftInternalDomains, defaultChatAgent)",
+    "  * keys the delta must leave alone (extensionAllowedProposedApi, commit,",
+    "    date, checksums) - the assertion that upstream's own additions survive",
+    "  * all seven recommendation maps, in both the array and object shapes,",
+    "    populated with Marketplace publisher ids",
+    "  * a gallery pointed at marketplace.visualstudio.com, so the generated",
+    "    output can be fed to the audit gate and observed to pass only because",
+    "    the delta repointed it",
+    "",
+    "The values are invented. The point of the fixture is the shape."
+  ],
+  "nameShort": "Code - OSS",
+  "nameLong": "Code - OSS",
+  "applicationName": "code-oss",
+  "dataFolderName": ".vscode-oss",
+  "serverApplicationName": "code-server-oss",
+  "serverDataFolderName": ".vscode-server-oss",
+  "urlProtocol": "code-oss",
+  "darwinBundleIdentifier": "com.visualstudio.code.oss",
+  "linuxIconName": "code-oss",
+  "quality": "stable",
+  "commit": "0000000000000000000000000000000000000000",
+  "date": "2026-01-01T00:00:00.000Z",
+  "checksums": {
+    "vs/base/parts/sandbox/electron-browser/preload.js": "placeholder"
+  },
+  "win32MutexName": "vscodeoss",
+  "win32RegValueName": "CodeOSS",
+  "win32AppUserModelId": "Microsoft.CodeOSS",
+  "win32DirName": "Microsoft Code OSS",
+  "win32NameVersion": "Microsoft Code OSS",
+  "win32ShellNameShort": "C&ode - OSS",
+  "win32x64AppId": "{{EA457B21-F73E-494C-ACAB-524FDE069978}}",
+  "win32arm64AppId": "{{D1ACE434-89C5-48D1-88D3-E2991DF85475}}",
+  "win32x64UserAppId": "{{771FD6B0-FA20-440A-A002-3B3BAC16DC50}}",
+  "win32arm64UserAppId": "{{D9E514E7-1A56-452D-9337-2990C0DC4310}}",
+  "enableTelemetry": true,
+  "aiConfig": {
+    "ariaKey": "placeholder-aria-key"
+  },
+  "appCenter": {
+    "win32-x64": "placeholder"
+  },
+  "msftInternalDomains": ["microsoft.com", "redmond.corp.microsoft.com"],
+  "experimentsUrl": "https://example-experiments.invalid/api/experiments",
+  "telemetryOptOutUrl": "https://example-docs.invalid/telemetry",
+  "crashReporter": {
+    "companyName": "Microsoft",
+    "productName": "VSCode"
+  },
+  "updateUrl": "https://example-update.invalid",
+  "extensionsGallery": {
+    "serviceUrl": "https://marketplace.visualstudio.com/_apis/public/gallery",
+    "itemUrl": "https://marketplace.visualstudio.com/items",
+    "resourceUrlTemplate": "https://example-cdn.invalid/{publisher}/{name}/{version}/{path}"
+  },
+  "builtInExtensions": [
+    {
+      "name": "ms-vscode.js-debug",
+      "version": "1.0.0",
+      "sha256": "placeholder",
+      "repo": "https://github.com/microsoft/vscode-js-debug"
+    }
+  ],
+  "extensionRecommendations": {
+    "ms-python.python": {
+      "onFileOpen": [{ "pathGlob": "**/*.py" }]
+    }
+  },
+  "configBasedExtensionTips": {
+    "git": {
+      "configPath": ".git/config",
+      "recommendations": {
+        "github.vscode-pull-request-github": { "name": "GitHub Pull Requests" }
+      }
+    }
+  },
+  "exeBasedExtensionTips": {
+    "python": {
+      "friendlyName": "Python",
+      "windowsPath": "%LOCALAPPDATA%\\Programs\\Python",
+      "recommendations": { "ms-python.python": { "name": "Python" } }
+    }
+  },
+  "remoteExtensionTips": {
+    "wsl": {
+      "friendlyName": "WSL",
+      "extensionId": "ms-vscode-remote.remote-wsl"
+    }
+  },
+  "languageExtensionTips": ["ms-dotnettools.csharp", "golang.go"],
+  "keymapExtensionTips": ["vscodevim.vim", "ms-vscode.sublime-keybindings"],
+  "webExtensionTips": ["ms-vscode.vscode-github-issue-notebooks"],
+  "virtualWorkspaceExtensionTips": {
+    "github": { "friendlyName": "GitHub Repositories" }
+  },
+  "defaultChatAgent": {
+    "extensionId": "github.copilot-chat",
+    "chatExtensionId": "github.copilot"
+  },
+  "gitHubEntitlement": {
+    "providerId": "github"
+  },
+  "editSessionsStoreUrl": "https://example-editsessions.invalid",
+  "licenseName": "MIT",
+  "licenseUrl": "https://github.com/microsoft/vscode/blob/main/LICENSE.txt",
+  "documentationUrl": "https://example-docs.invalid",
+  "privacyStatementUrl": "https://example-privacy.invalid",
+  "twitterUrl": "https://example-social.invalid/code",
+  "extensionAllowedProposedApi": ["ms-vscode.vscode-js-profile-flame"],
+  "extensionKind": {
+    "ms-vscode.js-debug": ["workspace"]
+  },
+  "tasConfig": {
+    "endpoint": "https://example-tas.invalid/api/v1/tas"
+  }
+}

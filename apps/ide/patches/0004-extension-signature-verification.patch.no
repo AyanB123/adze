@@ -1,0 +1,92 @@
+Subject: [PATCH 0004] extensionManagement: signature verification for a non-Microsoft gallery
+Refs: ADR-0009, ADR-0010
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix.
+
+This patch also cannot be written correctly from documentation alone: the exact
+shape depends on how the current upstream release structures
+ExtensionSignatureVerificationService and what it does when the verifier module is
+absent, and that has changed across releases.
+
+INTENT
+======
+
+Make extension installation work against a gallery whose extensions are not signed
+by Microsoft, without silently disabling integrity checking and without pretending
+a check happened that did not.
+
+THE PROBLEM
+===========
+
+Upstream verifies extension packages with `@vscode/vsce-sign`, a proprietary
+Microsoft-published binary, against signatures produced by the Microsoft
+Marketplace's signing infrastructure.
+
+ADR-0009 points the gallery at a self-hosted Open VSX instance, because the
+Marketplace Terms of Use prohibit fork access. Open VSX does not produce
+Microsoft's signatures. So every install attempt reaches a verification step that
+cannot succeed — not because the extension is bad, but because the signature it is
+being checked against does not exist.
+
+This is the adjustment every Code-OSS fork has to make. It is listed in ADR-0010's
+minimum in-tree patch set as "upstream hardcodes an assumption forks break".
+
+WHAT NOT TO DO
+==============
+
+The shortest fix is to make the verification function return "verified"
+unconditionally. Do not do that.
+
+It produces a build that reports every extension as signature-verified, including
+one that has been tampered with in transit. A user reading that UI has been
+actively misled, which is worse than a build that says nothing. The same reasoning
+appears in this project's applier rules about ValidationResult.validator: a field
+that claims evidence must not be widened to cover evidence that was never
+gathered.
+
+WHAT TO DO INSTEAD
+==================
+
+Make "this gallery does not sign extensions" a distinct, honest state:
+
+  * Verification is skipped, not faked. The install proceeds and the extension is
+    reported as unsigned.
+  * The gallery says whether it signs. A product.json flag on extensionsGallery is
+    the natural place, so the behaviour follows the configured registry rather than
+    a compile-time constant.
+  * Transport integrity still holds. Extensions are fetched over TLS from a host
+    we operate, and Open VSX publishes a SHA-256 per version. Checking the digest
+    is strictly better than skipping verification and is available without
+    Microsoft's signing chain.
+
+Point 3 is the part worth doing properly, and it is why this patch is medium risk
+rather than low: it is not a deletion, it is a small replacement.
+
+FILES
+=====
+
+  src/vs/platform/extensionManagement/node/extensionSignatureVerificationService.ts
+  src/vs/platform/extensionManagement/common/extensionManagement.ts   (the enum/result type)
+  src/vs/base/common/product.ts                                       (the gallery flag; see 0006)
+
+HOW TO WRITE IT
+===============
+
+  1. Read the current service. Establish what it does when vsce-sign is missing
+     entirely — a recent upstream may already have a "not available" path, in which
+     case this patch is much smaller than the above suggests.
+  2. Add the gallery flag to product.json via apps/ide/branding/product.delta.jq
+     and to the type via patch 0006.
+  3. Skip verification when the flag says the gallery is unsigned; verify the
+     published digest instead.
+  4. Confirm the extensions view reports the extension as unsigned. If the UI
+     claims verification, the patch is wrong even if installation works.
+  5. git -C apps/ide/vscode diff adze/pristine \
+       -- src/vs/platform/extensionManagement \
+       > apps/ide/patches/0004-extension-signature-verification.patch
+
+Step 4 is the acceptance criterion. Installation working is not.

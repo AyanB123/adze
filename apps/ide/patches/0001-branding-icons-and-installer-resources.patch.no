@@ -1,0 +1,71 @@
+Subject: [PATCH 0001] branding: icons, installer resources, and shell integration
+Refs: ADR-0010
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix and will not
+be applied. Writing hunks against `resources/` and `build/win32/` without having
+read the upstream tree at 1.135.0 would produce a patch that fails to apply, and
+a plausible-looking patch that fails is worse than a placeholder that says so.
+
+INTENT
+======
+
+Replace upstream's visual identity with Adze's, everywhere it is a file on disk
+rather than a string in product.json.
+
+`product.json` is generated from apps/ide/branding/product.delta.jq and carries
+every *name*, identifier, and URL. This patch carries everything that is a binary
+asset or an installer script, which a jq program cannot express.
+
+FILES
+=====
+
+  resources/win32/code.ico              application icon
+  resources/win32/code_70x70.png        Windows tile assets
+  resources/win32/code_150x150.png
+  resources/win32/*.ico                 per-file-type document icons
+  resources/darwin/code.icns            macOS bundle icon
+  resources/darwin/*.icns               per-file-type document icons
+  resources/linux/code.png              Linux icon, name from linuxIconName
+  resources/linux/rpm/code.spec.template
+  resources/linux/debian/control.template
+  build/win32/code.iss                  Inno Setup script
+  build/win32/*.bmp                     installer wizard imagery
+
+The Inno Setup script is the one interesting file. It reads AppId, mutex names,
+and the registry value name from product.json, so this patch should not hardcode
+any of them — if it does, the four fresh GUIDs in the delta stop being the single
+source of truth and a future GUID change silently fails to take effect.
+
+WHY THIS IS LOW RISK
+====================
+
+Upstream edits these files when it rebrands or adds a file-type association,
+which is rare. The churn table in ADR-0010 measured the code we build on; these
+resource paths are quieter still. Expect this patch to survive most upstream
+releases untouched.
+
+The risk that does exist is not merge risk. It is that an icon is missing for one
+target and the build fails late, in a packaging task, having already spent forty
+minutes compiling.
+
+HOW TO WRITE IT
+===============
+
+Assets have to be authored before the patch can exist, and none have been. The
+repository has one SVG (apps/vscode/media/adze.svg) intended for the extension's
+activity bar, which is the wrong size and the wrong format for every entry above.
+
+  1. Author the icon set from that SVG: .ico with 16/32/48/256 px frames, .icns
+     with the Retina variants, and the PNG tile sizes.
+  2. Copy them over the upstream paths in a fetched checkout.
+  3. git -C apps/ide/vscode diff adze/pristine -- resources build/win32 \
+       > apps/ide/patches/0001-branding-icons-and-installer-resources.patch
+  4. Rename this file away, or delete it once the real patch exists.
+
+Binary files inside a patch need `git diff --binary`. Without that flag git emits
+a "Binary files differ" marker that carries no content and applies as a no-op —
+producing a build that silently keeps upstream's icons.

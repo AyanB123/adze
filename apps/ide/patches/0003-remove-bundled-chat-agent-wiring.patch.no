@@ -1,0 +1,91 @@
+Subject: [PATCH 0003] chat: remove upstream's bundled agent wiring
+Refs: ADR-0010, ADR-0009
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix.
+
+Of the six patches in this series, this is the one that most needs to be written
+against source someone has actually read, and the one where invented hunks would
+do the most damage. See RISK below: the target directory took 67 commits in 5.8
+months.
+
+INTENT
+======
+
+Stop upstream's bundled chat agent from registering itself, so that it does not
+compete with Adze for the same panels, commands, and keybindings — and so that a
+build produced by this pipeline has no chat provider reaching a network endpoint
+we did not configure.
+
+The configuration half is already done: apps/ide/branding/product.delta.jq deletes
+defaultChatAgent, chatParticipantRegistry, gitHubEntitlement, chatEntitlementUrl,
+and aiEvaluationUrl. Without those keys, upstream's chat surfaces largely
+self-disable, because the entitlement flow has nothing to point at.
+
+This patch handles the remainder: view container registrations and command
+contributions that exist independently of product.json, and which would otherwise
+leave a second empty chat panel in the sidebar next to ours.
+
+FILES
+=====
+
+  src/vs/workbench/contrib/chat/browser/chat.contribution.ts
+  src/vs/workbench/contrib/chat/browser/chatSetup.ts
+  src/vs/workbench/contrib/chat/browser/actions/**
+  possibly src/vs/workbench/contrib/inlineChat/browser/inlineChat.contribution.ts
+
+Marked "possibly" because whether inline chat needs separate treatment depends on
+whether upstream still gates it on the same entitlement, and that has changed more
+than once.
+
+RISK: THIS IS THE HOT ONE
+=========================
+
+From the churn table in ADR-0010, measured over 5.8 months and ~24 releases:
+
+  src/vs/workbench/contrib/inlineChat/    67 commits
+
+That is the highest churn measured anywhere in the blast radius. A line-pinned
+patch here should be expected to break at a meaningful fraction of upstream's ~50
+releases per year, and each break costs a human a .rej resolution inside code they
+did not write and are not tracking.
+
+Three consequences follow, and they are the design:
+
+  1. **Delete registrations, never edit logic.** A patch that removes a
+     `registerAction2(...)` call or a `Registry.as(...).registerWorkbenchContribution(...)`
+     line survives upstream refactoring the implementation behind it. A patch that
+     modifies the implementation does not.
+
+  2. **Prefer configuration to code.** Every key the delta can remove is a hunk
+     this patch does not need. If a future upstream release adds a product.json
+     switch that disables the bundled agent, this patch should shrink to nothing.
+
+  3. **This is the argument for AHP.** ADR-0010 chose to run Adze's agent behind
+     upstream's Agent Host Protocol specifically so that we are not maintaining a
+     bespoke chat UI against this directory. The honest accounting: AHP does not
+     make this patch unnecessary — we still have to turn upstream's agent off — but
+     it caps the exposure at "one deletion patch" instead of "a parallel
+     implementation of a subsystem upstream ships weekly".
+
+If this patch becomes expensive to maintain, the correct response is to shrink it,
+not to grow it. Leaving upstream's chat panel visible and empty is a worse product
+but a cheaper fork, and that trade is available at any time.
+
+HOW TO WRITE IT
+===============
+
+  1. Fetch the checkout and generate product.json with the delta applied.
+  2. Build once with no patch here at all, and look at what upstream's chat
+     surfaces do when defaultChatAgent is absent. That measurement decides how
+     much this patch needs to remove, and it may be very little.
+  3. Remove only registration calls. Record in the patch header which upstream
+     symbols were referenced, so the next break is diagnosable without a bisect.
+  4. git -C apps/ide/vscode diff adze/pristine -- src/vs/workbench/contrib/chat \
+       > apps/ide/patches/0003-remove-bundled-chat-agent-wiring.patch
+
+Step 2 is not optional. It is the difference between a patch sized to the problem
+and a patch sized to an assumption.

@@ -1,0 +1,93 @@
+Subject: [PATCH 0005] update: read a static JSON feed instead of an update service
+Refs: ADR-0010
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix.
+
+INTENT
+======
+
+Point the update client at static JSON files behind a CDN, so that shipping
+auto-updates requires no server to operate.
+
+The delta already sets `updateUrl` to the feed's base
+(apps/ide/branding/product.delta.jq). This patch is the client change that makes
+the requests it issues satisfiable by files rather than by a service.
+
+WHY STATIC JSON
+===============
+
+Upstream's update client talks to an update *service* that answers a query about
+platform, architecture, quality, and the currently installed commit, and computes
+what to offer. Operating that service means running, monitoring, and securing an
+internet-facing endpoint whose failure mode is "nobody can update".
+
+A project with one maintainer should not own that. Static JSON has no runtime, no
+database, no deploy, and its worst failure is a cache serving a stale version for
+an hour. It is the correct amount of infrastructure here, and it is why ADR-0010
+lists this as a required patch rather than an optional nicety.
+
+THE SHAPE
+=========
+
+One file per platform-architecture-quality triple:
+
+  $updateUrl/api/update/win32-x64/stable/latest.json
+  $updateUrl/api/update/win32-arm64/stable/latest.json
+  $updateUrl/api/update/darwin-x64/stable/latest.json
+  $updateUrl/api/update/darwin-arm64/stable/latest.json
+  $updateUrl/api/update/linux-x64/stable/latest.json
+  $updateUrl/api/update/linux-arm64/stable/latest.json
+
+Each holding the fields upstream's client already expects — version, productVersion,
+url, sha256hash, supportsFastUpdate — so the response *shape* needs no change. What
+changes is that the client stops sending the installed commit as a query parameter
+and stops expecting the server to decide, and instead fetches the current
+descriptor and compares locally.
+
+FILES
+=====
+
+  src/vs/platform/update/common/updateService.ts        (the URL construction)
+  src/vs/platform/update/electron-main/abstractUpdateService.ts
+  src/vs/platform/update/electron-main/updateService.win32.ts
+  src/vs/platform/update/electron-main/updateService.darwin.ts
+  src/vs/platform/update/electron-main/updateService.linux.ts
+
+The per-platform files matter because the download-and-apply mechanisms differ.
+macOS delegates to Squirrel.Mac, which fetches its own feed and needs its own
+static file; Windows downloads an installer and runs it; Linux notifies and does
+nothing else. Only the URL construction is genuinely shared.
+
+RISK
+====
+
+Low to medium. The update platform is not a churn hotspot — it did not appear in
+ADR-0010's measured table because it was not in the blast radius at all — but the
+patch touches five files, so its exposure is breadth rather than volatility.
+
+Reduce that breadth if possible: if the URL construction can be confined to
+updateService.ts alone, this becomes a low-risk single-file patch.
+
+MUST NOT BE SKIPPED
+===================
+
+A build with a broken update client is not merely missing a feature. It is a build
+that cannot ship a security fix to the people already running it. If this patch is
+not ready, the honest response is to disable update checking entirely rather than
+to ship a client pointed at a feed that does not answer — a silently failing
+updater looks identical to an up-to-date install.
+
+HOW TO WRITE IT
+===============
+
+  1. Write and publish one real feed file first, even by hand. A client patched
+     against a guessed schema is untestable.
+  2. Change URL construction and local comparison. Leave the response type alone.
+  3. Verify on each platform separately. Squirrel.Mac in particular fails silently
+     when its feed is wrong, so "no update offered" is not evidence of success.
+  4. git -C apps/ide/vscode diff adze/pristine -- src/vs/platform/update \
+       > apps/ide/patches/0005-update-client-static-json-feed.patch

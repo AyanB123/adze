@@ -1,0 +1,78 @@
+Subject: [PATCH 0002] workbench: register the Adze contribution
+Refs: ADR-0010
+Status: UNWRITTEN — header and intent only, no diff hunks. See below.
+
+STATUS
+======
+
+This file contains no diff. It is disabled by its `.patch.no` suffix.
+
+The change it describes is a single appended import line, and it is still not
+written here, for a reason worth being precise about: the surrounding context
+lines are what a patch matches on, and they are unknown. A one-line patch with
+invented context is a patch that fails to apply while looking trivially correct
+in review — the worst combination available.
+
+INTENT
+======
+
+Append exactly one import to the workbench's contribution list so that the code
+in src/vs/workbench/contrib/adze/ is loaded.
+
+  import './contrib/adze/browser/adze.contribution.js';
+
+That is the entire patch. One line, appended at the end of the existing import
+block.
+
+FILES
+=====
+
+  src/vs/workbench/workbench.common.main.ts
+
+WHY THIS IS THE WHOLE INTEGRATION
+=================================
+
+ADR-0010's central structural claim: our features live in a directory upstream
+has no opinion on, so they cannot conflict. src/vs/workbench/contrib/adze/ is not
+a file upstream ever edits, never appears in an upstream diff, and therefore never
+conflicts — no matter how much code we put there.
+
+The cost of that arrangement is exactly this one line. It is the only place the
+fork touches a file upstream actively develops.
+
+RISK, AND WHY IT IS ACCEPTABLE
+==============================
+
+workbench.common.main.ts took 31 commits in the 5.8 months measured for ADR-0010.
+It will conflict often.
+
+It is nonetheless cheap, because the conflict is always the same shape: upstream
+appends imports to the same block we append to. `git rerere` records the
+resolution the first time a human does it and replays it afterwards. That is why
+.github/workflows/upstream-merge.yml caches .git/rr-cache across runs — without
+the cache, a human answers the identical question about the identical line ~50
+times a year, which is the toil the merge bot exists to remove.
+
+Two rules keep it cheap:
+
+  * Exactly one line. Two lines in different parts of the file is two conflicts
+    and two rerere entries. Everything else goes in adze.contribution.ts, on our
+    side of the boundary.
+  * Append, never insert. An import placed in the middle of the block conflicts
+    with any upstream addition nearby, instead of only with additions at the end.
+
+HOW TO WRITE IT
+===============
+
+  1. Fetch the checkout: bash apps/ide/scripts/10-fetch-upstream.sh
+  2. Create src/vs/workbench/contrib/adze/browser/adze.contribution.ts —
+     see apps/ide/contrib/README.md for what belongs in it.
+  3. Append the import to the end of the import block in
+     src/vs/workbench/workbench.common.main.ts.
+  4. git -C apps/ide/vscode diff adze/pristine \
+       -- src/vs/workbench/workbench.common.main.ts \
+       > apps/ide/patches/0002-workbench-register-adze-contrib.patch
+
+Generate this patch with `-U1`. Fewer context lines means fewer chances for an
+upstream edit nearby to invalidate the match, and for an appended line at the end
+of a block one line of context is sufficient to place it.

@@ -1,0 +1,17 @@
+# The patch series scopes attributes that the root .gitattributes cannot express
+# by extension alone.
+#
+# `*.patch` is already `-text` at the root, which is what keeps a CRLF checkout
+# from mangling a patch into "does not apply". The disabled form is
+# `NNNN-name.patch.no`, whose extension is `.no`, so it does not match `*.patch`
+# and would otherwise be normalised. Renaming a `.patch.no` back to `.patch` must
+# not depend on whether the file happened to be checked out before or after the
+# rename, so both forms are pinned here.
+*.patch     -text
+*.patch.no  -text
+*.rej       -text
+
+# jq programs are shell-adjacent build inputs: the Code-OSS build runs on Windows
+# through Git Bash, and a CR inside a jq string literal ends up inside the
+# generated product.json.
+*.jq        text eol=lf

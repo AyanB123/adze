@@ -1,0 +1,22 @@
+{
+  "$comment": [
+    "Publisher namespaces we have claimed on the Adze gallery.",
+    "",
+    "scripts/audit-gallery-recommendations.mjs resolves every extension id",
+    "recommended by the generated product.json against this list and fails the",
+    "build on a miss. ADR-0009 explains why that is a build gate rather than a",
+    "report: a recommendation for an unclaimed namespace on a self-hosted",
+    "registry is an invitation for anyone to register it and ship an update to",
+    "users whose editor told them to install it.",
+    "",
+    "The list is short on purpose. A namespace belongs here once it is actually",
+    "claimed on the gallery - not once someone intends to claim it. Adding a",
+    "namespace here to make a red build go green re-opens exactly the",
+    "vulnerability the gate exists to close.",
+    "",
+    "Nothing is claimed yet in the sense that matters, because no gallery has",
+    "been deployed. `adze` is listed because it is our own publisher id and the",
+    "namespace is reserved by construction on any instance we operate."
+  ],
+  "claimed": ["adze"]
+}
