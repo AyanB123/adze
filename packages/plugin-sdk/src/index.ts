@@ -30,9 +30,9 @@
  * | Surface | State |
  * | --- | --- |
  * | 1 — Tools (MCP) | **Real.** Translation to `@adze/mcp`'s config; MCP is not reimplemented. |
- * | 2 — Context providers | **Real** for `type: "glob"`. WASM providers work on the JS runtime. |
+ * | 2 — Context providers | **Real** for `type: "glob"`. A `type: "wasm"` provider needs a runtime this build does not have. |
  * | 3 — Slash commands | **Real**, including `!` and `@` interpolation. `!` needs a host-supplied gate-checked runner. |
- * | 4 — Hooks | **Real**, all nine events, wired to core's dispatch path. `edit.pre`/`edit.post` are derived from `tool.pre`/`tool.post`; `context.pre` and `session.compact` have no seam in core yet. |
+ * | 4 — Hooks | **Real** for seven of the spec's nine events, wired to core's dispatch path. `edit.pre`/`edit.post` are derived from `tool.pre`/`tool.post`; `context.pre` and `session.compact` have no seam in core and do not fire. |
  * | 5 — Subagents | **Real.** Declaration plus narrowing that cannot widen. |
  * | 6 — UI | **Type only, by design.** The engine refuses UI contributions. |
  * | WASM runtime | **Seam.** `wasm32-wasip2` is not implemented; the default runtime refuses the load rather than skipping the module. |
