@@ -112,12 +112,16 @@ entry was found by trying to build the thing it describes.
    `filesystem` is narrowable in front matter. The spec's subagent example shows no
    `permissions` block at all, so this is a gap the spec does not acknowledge.
 
-7. **`autoApprove` is a plugin declaring its own permission level.** The spec describes
-   it as "read-only calls that skip prompting", which sits awkwardly with architecture
-   invariant 4 — every tool call passes the permission gate, with no code path around
-   it. It is carried through to the MCP config unchanged and *not* interpreted here; a
-   host that honours it is making that decision, and it should be a user-side allowlist
-   rather than a manifest-side one. Unresolved.
+7. **`autoApprove` in a plugin manifest changes who is asserting.** The spec describes it
+   as "read-only calls that skip prompting", and `@adze/mcp` already handles the
+   dangerous reading correctly: it never short-circuits authorization, and it honours the
+   request only when the *server* declares `annotations.readOnlyHint`, warning and
+   dropping it otherwise. So this is not a gate bypass. What the spec does not address is
+   that `@adze/mcp` documents the list as something *an operator* wrote, and in a plugin
+   manifest a third party wrote it. The blast radius is bounded to tools the server
+   itself calls read-only, so it is narrow — but "the user consented to this list" is no
+   longer true, and the install-time permission display should show it. It is passed
+   through unchanged and not interpreted here.
 
 8. **`EngineCapabilities` has no plugin flag.** A surface cannot ask the engine whether
    plugins loaded or how many hooks are active, so it cannot tell a user that a policy
