@@ -31,6 +31,7 @@
  */
 
 import {
+  type FrontmatterScalar,
   parseFrontmatter,
   readMapping,
   readPositiveInteger,
@@ -136,6 +137,17 @@ export function parseSubagent(
     diagnostics.push(errorDiagnostic('frontmatter-invalid', `${source}: ${model.message}`));
   }
 
+  const permissionsMapping = readMapping(data, 'permissions');
+  if (!permissionsMapping.ok) {
+    diagnostics.push(
+      errorDiagnostic('frontmatter-invalid', `${source}: ${permissionsMapping.message}`),
+    );
+  }
+  const requestedPermissions = permissionsMapping.ok
+    ? readSubagentPermissions(permissionsMapping.value, source)
+    : { permissions: undefined, diagnostics: [] as readonly PluginDiagnostic[] };
+  diagnostics.push(...requestedPermissions.diagnostics);
+
   const prompt = parsed.document.body.trim();
   if (prompt.length === 0) {
     diagnostics.push(
@@ -170,8 +182,87 @@ export function parseSubagent(
       maxSteps: maxSteps.value,
       prompt,
       source,
-      permissions: undefined,
+      permissions: requestedPermissions.permissions,
     },
+  };
+}
+
+/**
+ * The `permissions:` block a subagent may declare to narrow itself further.
+ *
+ * This used to be hardcoded to `undefined`, which meant the whole permission half of
+ * {@link narrowSubagent} was unreachable from the parse path: an author writing
+ * `permissions: { filesystem: none }` to give a reviewer subagent no write access got
+ * the parent's level instead, and nothing said so. That direction is safe — a missing
+ * request falls back to the parent's grant, so it could never widen — but a declared
+ * narrowing that is silently discarded is the failure mode this package is otherwise
+ * careful about, and it is worse than a refusal because the author has no way to
+ * discover it.
+ *
+ * Only `filesystem` can be honoured, and the reason is a real limitation of the
+ * front-matter grammar rather than a choice. An inline mapping's values are scalars —
+ * `readMapping` returns `Record<string, FrontmatterScalar>` — and `network` and `env`
+ * are lists. `permissions: { network: [a, b] }` parses the value as the *string*
+ * '[a, b]', and the block form that would carry a list cannot nest under a mapping key
+ * because nested block mappings are refused. So those two are rejected with the reason
+ * named, rather than accepted and dropped. Narrow them in the plugin manifest, which
+ * is JSON and has no such limit.
+ */
+function readSubagentPermissions(
+  mapping: Readonly<Record<string, FrontmatterScalar>> | undefined,
+  source: string,
+): {
+  readonly permissions: Partial<PluginPermissions> | undefined;
+  readonly diagnostics: readonly PluginDiagnostic[];
+} {
+  if (mapping === undefined) return { permissions: undefined, diagnostics: [] };
+
+  const diagnostics: PluginDiagnostic[] = [];
+  let filesystem: PluginPermissions['filesystem'] | undefined;
+
+  for (const [key, value] of Object.entries(mapping)) {
+    if (key === 'filesystem') {
+      if (value === 'none' || value === 'read' || value === 'workspace-write') {
+        filesystem = value;
+        continue;
+      }
+      diagnostics.push(
+        errorDiagnostic(
+          'frontmatter-invalid',
+          `${source}: permissions.filesystem must be 'none', 'read', or 'workspace-write'. ` +
+            `Found '${String(value)}'.`,
+        ),
+      );
+      continue;
+    }
+
+    if (key === 'network' || key === 'env') {
+      diagnostics.push(
+        errorDiagnostic(
+          'frontmatter-invalid',
+          `${source}: permissions.${key} is a list, and front matter cannot express a list ` +
+            `inside an inline mapping — '${key}: ${String(value)}' would be read as text, not ` +
+            `as ${key === 'network' ? 'hosts' : 'variable names'}. Declare it in the plugin ` +
+            `manifest instead. This is an error rather than a silent omission because a ` +
+            `permission narrowing that does not take effect is worse than one that is refused.`,
+        ),
+      );
+      continue;
+    }
+
+    diagnostics.push(
+      errorDiagnostic(
+        'frontmatter-invalid',
+        `${source}: '${key}' is not a subagent permission. Only 'filesystem' can be narrowed ` +
+          `here.`,
+      ),
+    );
+  }
+
+  if (diagnostics.length > 0) return { permissions: undefined, diagnostics };
+  return {
+    permissions: filesystem === undefined ? undefined : { filesystem },
+    diagnostics: [],
   };
 }
 
