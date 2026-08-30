@@ -6,8 +6,9 @@ This document describes how Adze is put together and why. It is the map; the
 > [!NOTE]
 > **This document describes the intended architecture, and some of it is not built
 > yet.** As of 2026-08-29 the protocol, engine, applier, provider gateway,
-> retrieval, and CLI are committed and their suites pass. The sandbox, plugin
-> host, MCP client and server, SDK, and every surface other than the CLI are not.
+> retrieval, CLI, and embedding SDK are committed and their suites pass. The
+> sandbox, plugin host, MCP client and server, and every surface other than the CLI
+> are not.
 > Sections below flag the gap where it exists, and [the roadmap](../roadmap.md)
 > carries the authoritative per-package status. Two things worth knowing before
 > reading further: **there is no OS-level sandbox containment on any platform**,
@@ -194,11 +195,14 @@ graph LR
 | `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec | 🚧 in progress |
 | `@adze/plugin-sdk` | Manifest schema, hook bus, WASM host, authoring types | Semver-strict from 0.2 | ❌ no code |
 | `@adze/cli` | `adze` binary; plain text, TUI deferred | User-facing | ✅ |
-| `@adze/sdk` | Public embedding API | Semver-strict from 1.0 | ❌ no code |
+| `@adze/sdk` | Public embedding API | Semver-strict from 1.0 | ✅ |
 
-Because `@adze/sdk` does not exist yet, the CLI imports `@adze/core`,
-`@adze/providers`, `@adze/apply`, and `@adze/protocol` directly. That is a
-temporary deviation from the graph above, not a revision of it.
+`@adze/sdk` now exists, but the CLI predates it and still imports `@adze/core`,
+`@adze/providers`, `@adze/apply`, and `@adze/protocol` directly. That is a temporary
+deviation from the graph above, not a revision of it, and moving the CLI onto the SDK
+is the check that the embedding API is genuinely sufficient rather than merely
+present — a public API that our own surface does not use is an API nobody has tested.
+`examples/minimal-surface` is a surface built on `@adze/sdk` alone in the meantime.
 
 Cross-package types resolve through each package's built `dist/` output, which is
 gitignored. A dependency must therefore be built before a dependent can be
@@ -458,9 +462,9 @@ Ranked by how much you can change without forking.
 
 **This table describes the design target, not today's capability.** Of the rows
 below, only "use a different model" (provider config) and "build a new surface"
-(against `@adze/core` and `@adze/protocol`, since `@adze/sdk` is empty) are
-available now. Everything routed through a plugin or an MCP server needs the
-plugin host and `@adze/mcp`, neither of which is built.
+(`@adze/sdk`, with `examples/minimal-surface` as a working one) are available now.
+Everything routed through a plugin or an MCP server needs the plugin host and
+`@adze/mcp`, neither of which is built.
 
 | I want to... | Do this | Fork needed? |
 | --- | --- | --- |

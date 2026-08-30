@@ -23,13 +23,13 @@ declarations rather than stale build output.
 | `@adze/providers` | Landed | typecheck clean · 130 tests · lint clean |
 | `@adze/retrieval` | Landed, vectors deferred | typecheck clean · 250 tests, 2 skipped · lint clean |
 | `@adze/cli` | Landed | typecheck clean · 99 tests · lint clean |
+| `@adze/sdk` | Landed | typecheck clean · 63 tests · lint clean |
 | `@adze/mcp` | **In progress** | no committed source yet |
 | `apps/vscode` | **In progress** | no committed source yet |
 | `@adze/sandbox` | **Empty** | no source, no containment anywhere |
 | `@adze/plugin-sdk` | **Empty** | plugin surfaces are specified, not built |
-| `@adze/sdk` | **Empty** | surfaces import `core` directly for now |
 
-904 tests pass across the six landed packages, with zero lint errors and zero
+967 tests pass across the seven landed packages, with zero lint errors and zero
 lint warnings. The two skipped tests are conditional on tree-sitter grammar
 binaries being present, and are skipped when they are not.
 
