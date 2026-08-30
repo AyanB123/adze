@@ -176,5 +176,12 @@ jobs:
         with:
           name: apply-bench-report
           path: bench/.runs/
+          # `.runs` is a dotted directory, and upload-artifact treats a leading
+          # dot as hidden and skips it by default. Without this the step found
+          # nothing, tripped `if-no-files-found: error` and failed the job even
+          # though the suite had passed 50/50 and written the run — and the
+          # trajectories ADR-0011 requires be published were never actually
+          # uploaded. The guard below stays: an empty run is still an error.
+          include-hidden-files: true
           if-no-files-found: error
           retention-days: 14
