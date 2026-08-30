@@ -17,7 +17,7 @@ import { PassThrough } from 'node:stream';
 import type { ResolveOptions } from '@adze/providers';
 import { describe, expect, it, vi } from 'vitest';
 import { stdinReader } from '../src/agent/approval.js';
-import { runDoctor } from '../src/commands/doctor.js';
+import { runDoctor, type ShellCheck } from '../src/commands/doctor.js';
 import { runModels } from '../src/commands/models.js';
 import { EXIT, type Io } from '../src/output.js';
 
@@ -97,6 +97,49 @@ describe('the approval prompt never touches stdout', () => {
     expect(await answer).toBe('a');
     reader.close();
     expect(seen.join('')).toContain('choose:');
+  });
+
+  it('answers a second approval from input that arrived in one chunk', async () => {
+    // Found by driving a real run that needed two approvals with answers piped in. The
+    // first was granted and the second was refused as "no input available" — while the
+    // answer to it was sitting unread in the buffer.
+    //
+    // `rl.question()` registers a one-shot listener, but readline emits a `line` event for
+    // every line in a chunk as soon as it arrives. So lines after the first were emitted
+    // with nothing listening and dropped, the stream then ended, and the next `read` saw a
+    // closed interface. Every answer after the first silently became a denial.
+    //
+    // This is not a niche path. Any non-TTY stdin delivers its lines in one chunk, so it
+    // is the normal shape of a scripted run — and denial-by-losing-the-answer is
+    // indistinguishable in the transcript from the user having typed "n".
+    const input = new PassThrough();
+    const output = new PassThrough();
+    const reader = stdinReader({ input, output });
+
+    // Both answers in a single write, which is what a pipe does.
+    input.write('y\na\n');
+
+    expect(await reader.read('  first: ')).toBe('y');
+    expect(await reader.read('  second: ')).toBe('a');
+    reader.close();
+  });
+
+  it('reports end of input as end of input, once the buffer is genuinely empty', async () => {
+    // The other half: draining the buffer must not turn a real EOF into a hang. `deny` on
+    // end-of-stream is deliberate (see approval.ts), so this behaviour has to survive the
+    // queueing fix rather than be traded away for it.
+    const input = new PassThrough();
+    const reader = stdinReader({ input, output: new PassThrough() });
+
+    input.write('y\n');
+    expect(await reader.read('  first: ')).toBe('y');
+
+    const second = reader.read('  second: ');
+    input.end();
+    expect(await second).toBeUndefined();
+    // A further read stays undefined rather than throwing or hanging.
+    expect(await reader.read('  third: ')).toBeUndefined();
+    reader.close();
   });
 });
 
@@ -250,5 +293,92 @@ describe('adze doctor — reports model providers', () => {
       credentialSource: null,
       baseUrl: 'http://127.0.0.1:8790/v1',
     });
+  });
+});
+
+describe('adze doctor — reports whether the shell actually runs', () => {
+  /** A `doctor` invocation with provider resolution pinned, so only the shell varies. */
+  function withShell(probe: () => Promise<ShellCheck>) {
+    return { __testHooks: { resolve: localEndpoint(), probeShell: probe } };
+  }
+
+  it('reports the shell as ok when it runs a command', async () => {
+    const io = capture();
+    const code = await runDoctor(
+      withShell(async () => ({ ok: true, value: '/usr/bin/bash', detail: undefined })),
+      io,
+    );
+
+    expect(code).toBe(EXIT.Ok);
+    expect(io.stdout()).toMatch(/ok\s+shell\s+\/usr\/bin\/bash/);
+  });
+
+  it('warns when the shell resolves but cannot run a command', async () => {
+    // The real case, found by a run that spent ten steps and ~50k tokens on a shell that
+    // could never work. `bash.exe` on Windows is usually WSL's launcher; it exists whether
+    // or not a healthy distribution sits behind it, and a broken one exits non-zero for
+    // every command. `doctor` checked node, pnpm, git and ripgrep and never the shell, so
+    // nothing in the tool said the workhorse tool was dead.
+    const io = capture();
+    const code = await runDoctor(
+      withShell(async () => ({
+        ok: false,
+        value: 'found but cannot run a command (C:\\WINDOWS\\system32\\bash.exe)',
+        detail: 'Failed to attach disk to WSL2: The system cannot find the file specified.',
+      })),
+      io,
+    );
+
+    // A warning, not a failure: doctor's rule for optional tooling, and the exit code must
+    // not start depending on a machine's WSL health.
+    expect(code).toBe(EXIT.Ok);
+    const out = io.stdout();
+    expect(out).toContain('cannot run a command');
+    expect(out).toContain('bash -lc');
+    // The shell's own words, because "bash is broken" is not actionable and a WSL mount
+    // failure names the actual problem.
+    expect(out).toContain('Failed to attach disk');
+  });
+
+  it('says bash is missing rather than broken when it is not installed', async () => {
+    const io = capture();
+    await runDoctor(
+      withShell(async () => ({ ok: false, value: 'not found', detail: undefined })),
+      io,
+    );
+
+    const out = io.stdout();
+    expect(out).toMatch(/shell\s+not found/);
+    expect(out).toContain('Install bash');
+  });
+
+  it('names the tools that still work, so a broken shell is not read as a dead agent', async () => {
+    const io = capture();
+    await runDoctor(
+      withShell(async () => ({ ok: false, value: 'not found', detail: undefined })),
+      io,
+    );
+    expect(io.stdout()).toContain('read, edit, glob, grep');
+  });
+
+  it('carries the shell result into --json', async () => {
+    const io = capture();
+    await runDoctor(
+      {
+        json: true,
+        __testHooks: {
+          resolve: localEndpoint(),
+          probeShell: async () => ({ ok: false, value: 'not found', detail: undefined }),
+        },
+      },
+      io,
+    );
+
+    const parsed = JSON.parse(io.stdout()) as {
+      checks: readonly { name: string; ok: boolean; value: string }[];
+    };
+    expect(parsed.checks).toContainEqual(
+      expect.objectContaining({ name: 'shell', ok: false, value: 'not found' }),
+    );
   });
 });

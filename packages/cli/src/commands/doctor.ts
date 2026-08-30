@@ -48,7 +48,17 @@ export interface DoctorOptions {
    * have exported, which is a test that reports the machine rather than the code. Same
    * seam and same reason as `runModels`.
    */
-  readonly __testHooks?: { readonly resolve?: ResolveOptions };
+  readonly __testHooks?: {
+    readonly resolve?: ResolveOptions;
+    /**
+     * Replaces the shell probe.
+     *
+     * Injected so an assertion about the shell check reports the code rather than whether
+     * the machine running the suite happens to have a working bash — which is precisely
+     * the condition being tested, and therefore the one thing a test must not inherit.
+     */
+    readonly probeShell?: () => Promise<ShellCheck>;
+  };
 }
 
 interface Check {
@@ -178,6 +188,111 @@ function findRipgrep(): { value: string; ok: boolean } {
   };
 }
 
+/** The argv prefix `@adze/core` gives the `bash` tool, on every platform. */
+const SHELL_PREFIX: readonly [string, string] = ['bash', '-lc'];
+
+/** Outcome of actually running the shell, as opposed to finding it. */
+export interface ShellCheck {
+  readonly ok: boolean;
+  readonly value: string;
+  /** First line of the failure, when it ran and failed. Never a stack trace. */
+  readonly detail: string | undefined;
+}
+
+/**
+ * Does the shell the `bash` tool uses actually run a command?
+ *
+ * `doctor` reported node, pnpm, git and ripgrep, and said nothing about the one program
+ * the agent's workhorse tool cannot work without. ADR-0004 makes `bash` the single general
+ * tool, and core hard-codes `['bash', '-lc']` on every platform deliberately: substituting
+ * PowerShell or `cmd.exe` for model-authored bash would change quoting, globbing and
+ * redirection semantics, and some of those differences destroy data rather than merely
+ * failing. So bash is a real requirement on Windows too, not a Unix detail.
+ *
+ * It is probed by execution rather than by lookup, because on Windows resolving it proves
+ * nothing. `bash.exe` in System32 is WSL's launcher and it exists whether or not a healthy
+ * distribution is installed behind it; a broken WSL exits non-zero for every command,
+ * including one that only runs `exit 0`. That failure reaches the model as an ordinary
+ * non-zero exit, indistinguishable from a failing test suite, so an agent asked to run the
+ * tests rewrites the command and retries until its step budget is gone. That is the run
+ * that prompted this check: ten steps and fifty thousand tokens spent on a shell that
+ * could never have worked, with nothing in `doctor` that would have said so.
+ *
+ * `exit 0` is the probe rather than `--version` because the question is whether
+ * `bash -lc <command>` works, and only running that form answers it.
+ */
+async function probeShell(): Promise<ShellCheck> {
+  const [program, flag] = SHELL_PREFIX;
+  const resolved = whichSync(program);
+  if (resolved === undefined) return { ok: false, value: 'not found', detail: undefined };
+
+  try {
+    await runExecutable(resolved, [flag, 'exit 0']);
+    return { ok: true, value: `${resolved}`, detail: undefined };
+  } catch (cause) {
+    return {
+      ok: false,
+      value: `found but cannot run a command (${resolved})`,
+      // What the shell said, in preference to what Node said about it. `execFile` rejects
+      // with "Command failed: <argv>", which repeats the command back and explains
+      // nothing; the reason is in the child's own output.
+      detail: firstLine(outputOf(cause) ?? messageOf(cause)),
+    };
+  }
+}
+
+function messageOf(cause: unknown): string {
+  return cause instanceof Error ? cause.message : String(cause);
+}
+
+/**
+ * The child's own output, when the rejection carries any.
+ *
+ * `execFile` rejects with an `Error` carrying `stdout` and `stderr`, neither of which is in
+ * its type, so both are read through an index check rather than by asserting a shape. This
+ * is a failure path, and a wrong assumption here would replace a diagnosis with a crash.
+ *
+ * **stderr is preferred but stdout is also read**, which looks careless and is not: WSL's
+ * launcher prints its mount failure on *stdout* and leaves stderr empty. Taking only
+ * stderr means the one message worth reporting is the one that gets dropped, so the
+ * generic Node wrapper is used only when the child truly said nothing.
+ */
+function outputOf(cause: unknown): string | undefined {
+  if (typeof cause !== 'object' || cause === null) return undefined;
+  const record = cause as Record<string, unknown>;
+  for (const stream of [record.stderr, record.stdout]) {
+    if (typeof stream !== 'string') continue;
+    const text = stripNuls(stream).trim();
+    if (text.length > 0) return text;
+  }
+  return undefined;
+}
+
+/**
+ * Remove NUL bytes.
+ *
+ * Windows console programs — WSL's launcher among them — write UTF-16LE, and read as UTF-8
+ * that arrives as every character separated by a NUL, rendering as `F a i l e d   t o`.
+ * Decoding properly would mean guessing the child's encoding; dropping the NULs recovers
+ * the text in the case that actually occurs and leaves correct output untouched.
+ *
+ * Done with `replaceAll` on a string rather than a regex so no control character appears in
+ * a pattern, which is a lint rule worth keeping rather than suppressing.
+ */
+function stripNuls(text: string): string {
+  return text.replaceAll('\u0000', '');
+}
+
+/** First non-empty line, trimmed and capped, for a hint that stays one line. */
+function firstLine(text: string): string | undefined {
+  const line = stripNuls(text)
+    .split(/\r?\n/)
+    .map((part) => part.trim())
+    .find((part) => part.length > 0);
+  if (line === undefined) return undefined;
+  return line.length > 200 ? `${line.slice(0, 197)}...` : line;
+}
+
 /**
  * The provider section.
  *
@@ -296,7 +411,7 @@ function renderProviders(section: ProviderSection, io: Io, style: Style): void {
   );
 }
 
-async function buildChecks(section: ProviderSection): Promise<Check[]> {
+async function buildChecks(section: ProviderSection, shell: ShellCheck): Promise<Check[]> {
   const nodeOk = compareSemver(process.versions.node, MINIMUM_NODE_VERSION) >= 0;
   const ripgrep = findRipgrep();
   const pnpm = await versionOf('pnpm', ['--version']);
@@ -335,6 +450,25 @@ async function buildChecks(section: ProviderSection): Promise<Check[]> {
         ? {}
         : {
             hint: 'Retrieval will vendor @vscode/ripgrep — see docs/roadmap.md M1. Installing `rg` yourself also works.',
+          }),
+    },
+    {
+      name: 'shell',
+      ok: shell.ok,
+      value: shell.value,
+      // A warning rather than a failure, matching this command's rule for everything
+      // except node: tying the exit code to it would start failing `doctor` in CI on
+      // machines where nothing changed. The hint carries the weight instead, because the
+      // consequence - `bash` cannot run at all - is not something to state mildly.
+      required: false,
+      ...(shell.ok
+        ? {}
+        : {
+            hint: `The \`bash\` tool runs \`${SHELL_PREFIX.join(' ')} <command>\` and cannot work until this does. ${
+              shell.detail === undefined
+                ? 'Install bash (Git for Windows ships one).'
+                : `The shell reported: ${shell.detail}`
+            } On Windows, \`bash\` on PATH is often WSL's launcher, which fails this way when no healthy distribution is installed - Git for Windows' bash is the usual fix. Until then the agent can still read, edit, glob, grep and use symbols, but every command it tries will fail.`,
           }),
     },
     {
@@ -402,7 +536,8 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   const json = options.json === true;
   const s = styleFor(json);
   const section = buildProviderSection(options);
-  const checks = await buildChecks(section);
+  const shell = await (options.__testHooks?.probeShell ?? probeShell)();
+  const checks = await buildChecks(section, shell);
   const enforcement = sandboxEnforcement(process.platform, DEFAULT_SANDBOX_MODE);
   const failed = checks.filter((c) => c.required && !c.ok);
 

@@ -23,7 +23,7 @@
  * sandbox exists is a question they answer with the wrong information (ADR-0007).
  */
 
-import { createInterface, type Interface } from 'node:readline/promises';
+import { createInterface, type Interface } from 'node:readline';
 import type { ApprovalRequest, ApprovalResponse, SandboxEnforcement } from '@adze/protocol';
 import type { Io, Style } from '../output.js';
 
@@ -66,24 +66,74 @@ export interface StdinReaderOptions {
  * also the one stream the question did not belong on for ordering reasons: the prompt and
  * the block explaining what is being approved were flushed independently and interleaved
  * out of order.
+ *
+ * ### Why lines are queued instead of using `rl.question()`
+ *
+ * `question()` attaches a one-shot listener, but readline emits a `line` event for every
+ * line in a chunk the moment that chunk arrives. A pipe delivers all of its lines in one
+ * chunk, so the answers to the second and later prompts were emitted while nothing was
+ * listening and were dropped; the stream then ended and the next read saw a closed
+ * interface. Every approval after the first silently became a denial with the answer
+ * still in the buffer, and a lost answer is indistinguishable in the transcript from a
+ * user who typed `n`.
+ *
+ * So a persistent listener owns the stream and `read` takes from a queue. End of input is
+ * still a denial — see the file comment, that behaviour is deliberate — but now it means
+ * the buffer is genuinely empty rather than that a chunk was mistimed.
  */
 export function stdinReader(options: StdinReaderOptions = {}): LineReader {
+  const output = options.output ?? process.stderr;
   let rl: Interface | undefined;
+  /** Lines that arrived before any `read` asked for them. */
+  const buffered: string[] = [];
+  /** Pending `read` calls, oldest first, waiting for a line that has not arrived yet. */
+  const waiting: ((line: string | undefined) => void)[] = [];
+  /** No further line will ever arrive: the stream ended, or the reader was closed. */
+  let ended = false;
+
+  function settleAll(): void {
+    // Nothing may be left holding a promise that never resolves: an unsettled approval
+    // is a hung turn, which the file comment names as worse than a denial.
+    while (waiting.length > 0) waiting.shift()?.(undefined);
+  }
+
+  function ensureInterface(): void {
+    if (rl !== undefined || ended) return;
+    rl = createInterface({
+      input: options.input ?? process.stdin,
+      output,
+      terminal: false,
+    });
+    rl.on('line', (line: string) => {
+      const waiter = waiting.shift();
+      if (waiter === undefined) buffered.push(line);
+      else waiter(line);
+    });
+    rl.on('close', () => {
+      ended = true;
+      settleAll();
+    });
+  }
+
   return {
     async read(prompt: string): Promise<string | undefined> {
-      rl ??= createInterface({
-        input: options.input ?? process.stdin,
-        output: options.output ?? process.stderr,
-        terminal: false,
+      ensureInterface();
+      // Written here rather than by `question()`, which is no longer used. Same stream as
+      // before, so the stdout contract above is unchanged.
+      output.write(prompt);
+
+      const queued = buffered.shift();
+      if (queued !== undefined) return queued;
+      if (ended) return undefined;
+
+      return new Promise<string | undefined>((resolve) => {
+        waiting.push(resolve);
       });
-      try {
-        return await rl.question(prompt);
-      } catch {
-        // Closed stream, or Ctrl-C during the question. Both are "no answer".
-        return undefined;
-      }
     },
     close(): void {
+      ended = true;
+      settleAll();
+      buffered.length = 0;
       rl?.close();
       rl = undefined;
     },
