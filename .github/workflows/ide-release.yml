@@ -1,0 +1,303 @@
+# Release pipeline for the Adze IDE. Six targets, per milestone M4 in
+# docs/roadmap.md and the build pipeline in
+# docs/architecture/adr/0010-ide-fork-strategy.md.
+#
+# ─── THIS WORKFLOW IS INACTIVE ─────────────────────────────────────────────
+#
+# It has never been run. No job here has ever executed, and no binary has ever
+# been produced by this repository.
+#
+# `workflow_dispatch` is the only trigger, and the `schedule:` block below is
+# commented out deliberately. A maintainer opts in by running it manually once,
+# reading what breaks, and fixing it — not by merging a workflow that starts
+# consuming an hour of runner time per attempt on a schedule.
+#
+# Two things are known to be missing before this can produce something
+# distributable, and both are recorded in apps/ide/README.md rather than left for
+# a red run to reveal:
+#
+#   1. Every patch in apps/ide/patches/ is an unwritten placeholder with a
+#      .patch.no suffix. The pipeline runs; it applies zero patches.
+#   2. apps/ide/branding/product.delta.jq points the gallery and the update feed
+#      at RFC 2606 reserved hostnames, because neither has been deployed.
+#      30-generate-product.sh refuses to emit that product.json, so this workflow
+#      passes --allow-placeholders and every artifact it produces is explicitly
+#      not for distribution.
+#
+# Signing and notarization are not wired up at all. See the closing summary step.
+#
+# ─── WHY COMPILE ONCE, PACKAGE MANY ────────────────────────────────────────
+#
+# Six targets share one architecture-independent TypeScript compile, which is the
+# expensive half at 20-40 minutes. Running the full `vscode-<platform>-<arch>-min`
+# task per target compiles the same sources six times for one release, which is
+# most of a CI budget spent producing an identical intermediate.
+#
+# The structure is therefore three jobs — one per operating system — each
+# compiling once and then packaging both architectures. It is not six jobs
+# consuming one shared compile artifact, and that is a deliberate choice: the
+# compiled tree plus platform-specific node_modules is several gigabytes, so
+# uploading and re-downloading it costs more wall-clock and more storage than the
+# compile it would save. arm64 is cross-compiled on the x64 runner via
+# npm_config_arch, which is how upstream and every fork of it build arm64 today.
+#
+# The honest limitation of cross-compilation: nothing here can run the arm64
+# artifact, so an arm64 build is verified only to the extent that packaging
+# succeeded. A smoke test needs real hardware.
+#
+# Actions use major tags, matching ci.yml and managed by Dependabot. That is
+# acceptable here for the same reason it is acceptable there — nothing in this
+# workflow is granted write access. upstream-merge.yml pins to commit SHAs
+# because it needs `contents: write`, which SECURITY.md makes the trigger for
+# mandatory pinning.
+
+name: ide-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: 'Space-separated targets, or "all" for all six'
+        required: false
+        default: 'all'
+        type: string
+      skip_package:
+        description: 'Stop after the compile. Cheapest way to find out whether the patch series and branding still work.'
+        required: false
+        type: boolean
+        default: true
+
+  # Enable once the workflow has completed manually at least once, the patch
+  # series contains real patches, and the endpoints in product.delta.jq are real.
+  # schedule:
+  #   - cron: '0 8 * * 1'
+
+# Nothing here writes to the repository, publishes, or needs an OIDC token.
+# Artifacts are uploaded through actions/upload-artifact, which does not require
+# `contents: write`.
+permissions:
+  contents: read
+
+concurrency:
+  group: ide-release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DO_NOT_TRACK: '1'
+  # Reserved-TLD endpoints are permitted here because nothing this workflow
+  # produces is distributable. Removing this line is part of the first real
+  # release, and until then it is the switch that keeps the refusal honest.
+  ADZE_ALLOW_PLACEHOLDER_ENDPOINTS: '1'
+
+jobs:
+  # Everything that can be checked without a 2 GB clone or a 40-minute compile.
+  # Runs in under a minute and catches the two most common causes of a failed
+  # fork build: a mangled patch and a broken branding delta.
+  verify:
+    name: verify (no clone)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: install jq
+        run: |
+          # Present on every GitHub-hosted runner image, but asserted rather than
+          # assumed: product.json has no committed copy to fall back on.
+          jq --version
+
+      - name: preflight
+        run: bash apps/ide/scripts/00-preflight.sh
+
+      - name: verify the product.json delta
+        run: bash apps/ide/scripts/verify-product-delta.sh
+
+      - name: patch series line endings and numbering
+        run: |
+          # 20-apply-patches.sh does both checks, but it needs a checkout to run
+          # against. This is the subset that does not.
+          fail=0
+          for p in apps/ide/patches/*.patch apps/ide/patches/*.patch.no; do
+            [ -e "$p" ] || continue
+            if LC_ALL=C grep -qU $'\r' "$p"; then
+              echo "::error file=$p::contains CRLF and will fail to apply"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
+      - name: report series status
+        run: |
+          enabled="$(find apps/ide/patches -maxdepth 1 -name '*.patch' | wc -l)"
+          disabled="$(find apps/ide/patches -maxdepth 1 -name '*.patch.no' | wc -l)"
+          {
+            echo "### Patch series"
+            echo
+            echo "- enabled: $enabled"
+            echo "- disabled (\`.patch.no\`): $disabled"
+            echo
+            if [ "$enabled" -eq 0 ]; then
+              echo "Every patch is a documented placeholder. The pipeline runs and"
+              echo "applies nothing, which is the expected state before M4."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # One job per operating system. Compiles once, then packages each architecture
+  # from that single compile.
+  build:
+    name: ${{ matrix.os_label }}
+    needs: verify
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      # A win32 failure says nothing about whether darwin works, and finding out
+      # about all three in one run is the point of a release workflow.
+      fail-fast: false
+      matrix:
+        include:
+          - os_label: win32 (x64, arm64)
+            runner: windows-latest
+            platform: win32
+            arches: x64 arm64
+          - os_label: darwin (x64, arm64)
+            runner: macos-latest
+            platform: darwin
+            arches: x64 arm64
+          - os_label: linux (x64, arm64)
+            runner: ubuntu-latest
+            platform: linux
+            arches: x64 arm64
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: install python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install linux build dependencies
+        if: matrix.platform == 'linux'
+        run: |
+          sudo apt-get update
+          # Upstream's native modules need these headers. Missing libkrb5-dev in
+          # particular fails inside a transitive dependency and does not name
+          # itself in the error.
+          sudo apt-get install -y --no-install-recommends \
+            libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
+
+      # Windows MAX_PATH. Upstream's node_modules tree exceeds 200 characters on
+      # its own, and the runner workspace path consumes a further 30 before the
+      # build starts. A build root at the drive root is the difference between a
+      # build that completes and an ENAMETOOLONG reported as a missing module.
+      - name: choose a short build root (windows)
+        if: matrix.platform == 'win32'
+        shell: bash
+        run: echo 'ADZE_IDE_BUILD_ROOT=/c/a' >> "$GITHUB_ENV"
+
+      - name: preflight
+        shell: bash
+        run: bash apps/ide/scripts/00-preflight.sh
+
+      - name: fetch upstream at the pinned tag
+        shell: bash
+        run: bash apps/ide/scripts/10-fetch-upstream.sh
+
+      - name: apply the patch series
+        shell: bash
+        run: bash apps/ide/scripts/20-apply-patches.sh
+
+      - name: generate product.json from the delta
+        shell: bash
+        run: bash apps/ide/scripts/30-generate-product.sh
+
+      # ADR-0009. A recommendation naming an unclaimed namespace on a self-hosted
+      # registry is an invitation to squat it, which is the vector used against
+      # four commercial forks in late 2025. It gates the build rather than the
+      # release, so a bad delta cannot reach a packaging step at all.
+      - name: audit gallery recommendations
+        shell: bash
+        run: bash apps/ide/scripts/40-audit-gallery.sh
+
+      - name: neutralize telemetry endpoints
+        shell: bash
+        run: bash apps/ide/scripts/50-neutralize-telemetry.sh
+
+      - name: record our entire diff against upstream
+        shell: bash
+        run: |
+          # `git diff adze/pristine` is the whole of the fork. Recording it per
+          # run makes "maintenance cost proportional to our diff" a number
+          # somebody can look at rather than an assertion in an ADR.
+          root="${ADZE_IDE_BUILD_ROOT:-apps/ide/vscode}"
+          git -C "$root" diff --stat adze/pristine | tail -n 1 >> "$GITHUB_STEP_SUMMARY"
+
+      - name: compile once
+        shell: bash
+        run: bash apps/ide/scripts/60-build.sh --compile-only
+
+      - name: package each architecture
+        if: ${{ inputs.skip_package == false }}
+        shell: bash
+        env:
+          TARGETS: ${{ inputs.targets }}
+        run: |
+          for arch in ${{ matrix.arches }}; do
+            target="${{ matrix.platform }}-${arch}"
+            if [ "$TARGETS" != "all" ] && ! printf '%s' "$TARGETS" | grep -qw "$target"; then
+              echo "skipping $target (not requested)"
+              continue
+            fi
+            echo "::group::package $target"
+            # Cross-compiling arm64 on an x64 runner. Nothing here can execute
+            # the result, so packaging success is the only signal available.
+            if [ "$arch" = 'arm64' ]; then
+              export npm_config_arch=arm64
+              export npm_config_target_arch=arm64
+            fi
+            bash apps/ide/scripts/60-build.sh --target "$target" --skip-install
+            echo '::endgroup::'
+          done
+
+      - name: upload artifacts
+        if: ${{ inputs.skip_package == false }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: adze-ide-${{ matrix.platform }}
+          # Sibling of the checkout: upstream's packaging tasks write
+          # VSCode-<platform>-<arch>/ next to the source tree.
+          path: |
+            ${{ env.ADZE_IDE_BUILD_ROOT || 'apps/ide' }}/../VSCode-*
+          if-no-files-found: error
+          retention-days: 7
+
+  summary:
+    name: summary
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: state what was and was not produced
+        run: |
+          {
+            echo "### What this run did not do"
+            echo
+            echo "Whatever artifacts exist above are **not distributable**:"
+            echo
+            echo "- Unsigned. Windows Authenticode signing, macOS codesign with the"
+            echo "  hardened runtime, and macOS notarytool submission are not wired up."
+            echo "- Pointed at RFC 2606 reserved hostnames for the extension gallery"
+            echo "  and the update feed, because neither has been deployed."
+            echo "  \`ADZE_ALLOW_PLACEHOLDER_ENDPOINTS=1\` in this workflow is what"
+            echo "  permits that, and removing it is part of the first real release."
+            echo "- Built from a patch series in which every patch is an unwritten"
+            echo "  placeholder, so no branding beyond \`product.json\` is applied."
+            echo "- arm64 targets are cross-compiled and were never executed."
+            echo
+            echo "See apps/ide/README.md for the ordered zero-to-binary checklist."
+          } >> "$GITHUB_STEP_SUMMARY"
