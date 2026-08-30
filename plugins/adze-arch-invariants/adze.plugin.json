@@ -1,0 +1,29 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.arch-invariants",
+  "version": "0.1.0",
+  "displayName": "Architecture Invariants",
+  "description": "Denies an edit that would violate the package dependency graph or make the engine render output.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "hooks": [
+      {
+        "event": "edit.pre",
+        "module": "hooks/invariants.mjs",
+        "runtime": "js",
+        "timeoutMs": 500
+      },
+      {
+        "event": "tool.pre",
+        "module": "hooks/invariants.mjs",
+        "runtime": "js",
+        "timeoutMs": 500
+      }
+    ]
+  },
+  "permissions": {
+    "filesystem": "none"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.commit-conventions",
+  "version": "0.1.0",
+  "displayName": "Commit Conventions",
+  "description": "Writes Conventional Commit messages with a DCO sign-off, refuses a commit that would not carry one, and refuses history rewrites.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "commands": [{ "path": "commands/commit.md" }, { "path": "commands/changeset.md" }],
+    "hooks": [
+      {
+        "event": "tool.pre",
+        "module": "hooks/conventions.mjs",
+        "runtime": "js",
+        "timeoutMs": 500
+      }
+    ]
+  },
+  "permissions": {
+    "filesystem": "none"
+  }
+}
