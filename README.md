@@ -7,6 +7,7 @@
 A headless agent engine you can embed, a CLI, a VS Code / Cursor extension, and a
 branded IDE — all Apache-2.0, all running the same engine, all local-first by default.
 
+[Guides](docs/guides/README.md) ·
 [Architecture](docs/architecture/README.md) ·
 [Roadmap](docs/roadmap.md) ·
 [Benchmark policy](docs/benchmarks/strategy.md) ·
@@ -250,6 +251,18 @@ this, so `pnpm check` handles the ordering for you.
 
 Requirements: Node 22+, pnpm 10+, Git. Docker is needed only for benchmarks.
 Rust is needed only if you build the IDE.
+
+From there, [docs/guides/](docs/guides/README.md) is the user documentation. Every
+command in it was run against the built binary before being written down.
+
+- [Getting started](docs/guides/getting-started.md) — build, configure a provider
+  (including a free local one via Ollama), first run, and what each command does.
+- [Configuration](docs/guides/configuration.md) — the two-axis permission model,
+  command-prefix rules, budgets, and `.adze/providers.json`.
+- [Local testing](docs/guides/local-testing.md) — trying Adze on Windows without
+  regretting it.
+- [Plugins](docs/guides/plugins.md) — the eight first-party plugins, and writing one.
+- [Embedding](docs/guides/embedding.md) — building your own surface on `@adze/sdk`.
 
 ## Contributing
 
