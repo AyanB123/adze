@@ -50,6 +50,68 @@ describe('built-in providers', () => {
     expect(resolve().providers.map((p) => p.id)).not.toContain('openai-compatible');
   });
 
+  it('materialises openai-compatible once the environment supplies a base URL', () => {
+    // BASE_URL_ENV and API_KEY_ENV both name variables for this kind, but no built-in
+    // entry existed for them to resolve against, so exporting both was a silent no-op:
+    // `doctor` listed only anthropic and openai, and a user following the environment
+    // variable documentation had no way to tell that a config file was also required.
+    // The original reasoning for the omission holds — an entry with no endpoint cannot
+    // work and explains nothing — and a base URL in the environment is precisely the
+    // condition that removes it.
+    const config = resolve({ env: { ADZE_COMPATIBLE_BASE_URL: 'http://127.0.0.1:8790/v1' } });
+    const compatible = config.providers.find((p) => p.id === 'openai-compatible');
+
+    expect(compatible?.kind).toBe('openai-compatible');
+    expect(compatible?.baseURL).toBe('http://127.0.0.1:8790/v1');
+  });
+
+  it('materialises it from the vendor-standard base URL name too', () => {
+    const config = resolve({
+      env: { OPENAI_COMPATIBLE_BASE_URL: 'http://127.0.0.1:11434/v1' },
+    });
+
+    expect(config.providers.find((p) => p.id === 'openai-compatible')?.baseURL).toBe(
+      'http://127.0.0.1:11434/v1',
+    );
+  });
+
+  it('picks up the compatible key on the environment-materialised entry', () => {
+    const config = resolve({
+      env: {
+        ADZE_COMPATIBLE_BASE_URL: 'http://127.0.0.1:8790/v1',
+        ADZE_COMPATIBLE_API_KEY: 'gw-key-aaaaaaaaaaaaaaaa',
+      },
+    });
+    const compatible = config.providers.find((p) => p.id === 'openai-compatible');
+
+    expect(compatible?.apiKey).toBe('gw-key-aaaaaaaaaaaaaaaa');
+    expect(compatible?.apiKeySource).toBe('ADZE_COMPATIBLE_API_KEY');
+  });
+
+  it('does not materialise it from a key alone, which still has nowhere to send', () => {
+    const config = resolve({ env: { ADZE_COMPATIBLE_API_KEY: 'gw-key-aaaaaaaaaaaaaaaa' } });
+
+    expect(config.providers.map((p) => p.id)).not.toContain('openai-compatible');
+  });
+
+  it('lets a config file entry of the same id win over the environment-materialised one', async () => {
+    // The file is more specific than the environment for everything except the key, and
+    // an id collision must not produce two entries or a base URL from the wrong source.
+    await writeConfig(
+      dir,
+      JSON.stringify({
+        providers: {
+          'openai-compatible': { kind: 'openai-compatible', baseURL: 'http://from-file/v1' },
+        },
+      }),
+    );
+    const config = resolve({ env: { ADZE_COMPATIBLE_BASE_URL: 'http://from-env/v1' } });
+    const matching = config.providers.filter((p) => p.id === 'openai-compatible');
+
+    expect(matching).toHaveLength(1);
+    expect(matching[0]?.baseURL).toBe('http://from-file/v1');
+  });
+
   it('reports no key without failing, so models and doctor work on a bare machine', () => {
     const anthropic = resolve().providers.find((provider) => provider.id === 'anthropic');
 

@@ -251,11 +251,32 @@ function resolveOne(
  * indistinguishable from one Adze does not support, and that ambiguity is the whole
  * reason a user cannot tell which variable to set.
  *
- * `openai-compatible` is *not* here: it has no default endpoint, so an unconfigured
- * entry would be a provider that cannot work and says nothing about why.
+ * `openai-compatible` is conditional: it has no default endpoint, so an entry for it
+ * without one would be a provider that cannot work and says nothing about why. A base
+ * URL in the environment is exactly the condition that removes that objection, so the
+ * entry is materialised then and only then.
+ *
+ * Without that condition the two variables in `BASE_URL_ENV['openai-compatible']` were
+ * unreachable: they were consulted by `resolveOne`, but only for an entry a config file
+ * had already declared, so a user who exported `ADZE_COMPATIBLE_BASE_URL` and
+ * `ADZE_COMPATIBLE_API_KEY` and nothing else got a silent no-op — `doctor` listed
+ * `anthropic` and `openai`, neither of which was what they configured, and no message
+ * anywhere said a file was also required.
  */
-function builtinEntries(): Record<string, ProviderEntry> {
-  return { anthropic: { kind: 'anthropic' }, openai: { kind: 'openai' } };
+function builtinEntries(
+  env: Readonly<Record<string, string | undefined>>,
+): Record<string, ProviderEntry> {
+  const entries: Record<string, ProviderEntry> = {
+    anthropic: { kind: 'anthropic' },
+    openai: { kind: 'openai' },
+  };
+  // The value is read by `resolveOne` through `BASE_URL_ENV`; this only decides whether
+  // there is an entry for it to populate. Kept as a presence check so the URL has one
+  // resolution path rather than two that can disagree.
+  if (firstDefined(env, BASE_URL_ENV['openai-compatible']) !== undefined) {
+    entries['openai-compatible'] = { kind: 'openai-compatible' };
+  }
+  return entries;
 }
 
 /**
@@ -272,7 +293,7 @@ export function resolveConfig(options: ResolveOptions = {}): ResolvedConfig {
 
   const sources: string[] = [];
   let fileDefaultModel: string | undefined;
-  const entries: Record<string, ProviderEntry> = builtinEntries();
+  const entries: Record<string, ProviderEntry> = builtinEntries(env);
 
   if (options.ignoreConfigFiles !== true) {
     // User-level first, then workspace, so the nearer file wins on a per-key basis.
