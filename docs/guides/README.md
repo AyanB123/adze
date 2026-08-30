@@ -9,6 +9,7 @@ User documentation for Adze. For the reasoning behind the design, read
 | [getting-started.md](getting-started.md) | You have just cloned the repository. Install, build, configure a provider — including a free local one — run your first task, and learn what each of the six commands does. Also the plain list of what Adze cannot do yet. |
 | [configuration.md](configuration.md) | You want to bound what an agent can do. The two-axis permission model, command-prefix rules, budgets, model selection, and `.adze/providers.json`. |
 | [local-testing.md](local-testing.md) | You are on Windows and want to try Adze without regretting it. A launcher with restrictive defaults that refuses to run outside a git repository. |
+| [gateway-openai-compatible.md](gateway-openai-compatible.md) | You want to point Adze at an OpenAI-compatible gateway — OpenRouter, llama.cpp, Ollama, vLLM, or an in-house one. Includes how to check that a gateway actually serves your model in the OpenAI wire format before configuring it. |
 | [plugins.md](plugins.md) | You want to encode a team policy without forking. The eight first-party plugins, the deny-capable hook, and how to write your own. |
 | [embedding.md](embedding.md) | You want to build your own surface — a CLI, an extension, a daemon, a bot — on `@adze/sdk`. |
 
