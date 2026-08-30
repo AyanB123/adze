@@ -3,8 +3,14 @@
  *
  * ADR-0011 puts them in an ADR rather than a style guide because they must be
  * non-negotiable by a maintainer who wants a launch. This module is the same
- * intention one level down: the reporter calls these functions, and there is no
- * parameter that relaxes either rule.
+ * intention one level down: the rules are return values rather than prose, and there
+ * is no parameter that relaxes either one.
+ *
+ * **Not yet wired into the reporter.** `renderReportMarkdown` does not call anything
+ * here, and this module is not exported from `src/index.ts`. Every function below is
+ * therefore a gate that a caller must choose to pass through, not one the report
+ * generator already passes through. That wiring is the next step, and until it lands,
+ * the honest description of these two rules is enforceable rather than enforced.
  *
  * **Rule 1 — no win claimed inside 3 percentage points.** `compareToBaseline`
  * returns a verdict, and `within-noise` is a verdict rather than a warning. There is

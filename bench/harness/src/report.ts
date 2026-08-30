@@ -8,7 +8,7 @@
  *
  * So `renderReportMarkdown` assembles an ordered list of sections in which
  * limitations is index 0 and no number can be printed above it. There is no
- * parameter that reorders them, and `test/report.test.ts` asserts that the
+ * parameter that reorders them, and `test/apply-bench.test.ts` asserts that the
  * limitations heading precedes the first percentage in the output. Getting the
  * headline number to the top would take a deliberate edit to this file plus
  * deleting that test, which is the point.

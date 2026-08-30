@@ -111,8 +111,13 @@ export function attemptRate(taskOutcomes: readonly boolean[]): number | null {
  * This exists because the max-over-N rule is not really aimed at a function call —
  * nobody writes `Math.max` and thinks they are following the policy. It is aimed at
  * a `result.json` whose headline was filled in by hand from the run that went best.
- * `validatePublication` calls this and blocks the report, so the check runs on the
- * artifact rather than on the author's intent.
+ * The intended caller is an artifact-validation step that blocks the report, so that
+ * the check runs on the artifact rather than on the author's intent.
+ *
+ * **That caller does not exist yet.** Nothing in this package calls this function, so
+ * this rule is currently enforceable rather than enforced. Wiring it is tracked as the
+ * next step for this module; until then, do not read the presence of this function as
+ * evidence that a generated report has been checked for it.
  *
  * Only meaningful when the attempts actually differ: with zero variance the mean and
  * the max coincide and there is nothing to detect, so that case is not an accusation.
