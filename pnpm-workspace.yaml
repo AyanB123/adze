@@ -5,6 +5,7 @@ packages:
   - "bench/harness"
   - "bench/suites/*"
   - "plugins/*"
+  - "examples/*"
 
 # Single source of truth for dependency versions across every workspace package.
 # Adding a dep? Put the version here and reference it as `catalog:` from the
