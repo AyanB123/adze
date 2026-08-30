@@ -291,6 +291,74 @@ describe('runTurn — every budget terminates the loop', () => {
     expect(outcome.message).toContain('wall-clock budget exhausted');
   });
 
+  it('clamps a tool call timeout to the wall clock the turn has left', async () => {
+    // Found driving a real model: `--max-time 15` produced a 98.7-second run, because
+    // the wall-clock ceiling was only consulted *between* steps. A single tool call —
+    // a hanging command, a test suite that never returns — ran to its own unrelated
+    // tool timeout and blew straight through the turn budget. `budget.ts` states the
+    // rule this violates: an unenforced budget is a suggestion.
+    //
+    // `BudgetTracker.remainingWallClockMs()` was written for exactly this and was never
+    // called from anywhere, which is why the omission was invisible.
+    let now = 0;
+    const seen: number[] = [];
+    const probe = defineTool({
+      name: 'probe',
+      description: 'records the limits it was dispatched with',
+      schema: z.object({}),
+      effects: () => [],
+      execute: async (_args, ctx) => {
+        seen.push(ctx.limits.timeoutMs);
+        return await Promise.resolve({ ok: true, content: [{ type: 'text', text: 'ok' }] });
+      },
+    });
+
+    const harness = setup({
+      budget: { maxWallClockMs: 5_000 },
+      clock: { now: () => now },
+      tools: [probe],
+      script: ({ step }) => {
+        if (step > 0) return { text: 'done' };
+        // 4 800 ms of the turn's 5 000 ms ceiling are gone before the tool runs.
+        now = 4_800;
+        return { toolCalls: [{ name: 'probe', arguments: {} }] };
+      },
+    });
+
+    const outcome = await harness.run();
+
+    expect(outcome.stopReason).toBe('end-turn');
+    expect(seen).toHaveLength(1);
+    // The harness configures a 1 000 ms per-tool ceiling, but only 200 ms of the turn
+    // remain, so 200 is the honest limit to hand the tool.
+    expect(seen[0]).toBe(200);
+  });
+
+  it('leaves the tool timeout alone when the turn has no wall-clock budget', async () => {
+    // The clamp must not become a backdoor ceiling on an unbounded turn.
+    const seen: number[] = [];
+    const probe = defineTool({
+      name: 'probe',
+      description: 'records the limits it was dispatched with',
+      schema: z.object({}),
+      effects: () => [],
+      execute: async (_args, ctx) => {
+        seen.push(ctx.limits.timeoutMs);
+        return await Promise.resolve({ ok: true, content: [{ type: 'text', text: 'ok' }] });
+      },
+    });
+
+    const harness = setup({
+      budget: {},
+      tools: [probe],
+      script: ({ step }) =>
+        step > 0 ? { text: 'done' } : { toolCalls: [{ name: 'probe', arguments: {} }] },
+    });
+
+    await harness.run();
+    expect(seen).toEqual([1_000]);
+  });
+
   it('maxSpendUsd stops with budget-exhausted', async () => {
     const harness = setup({
       budget: { maxSpendUsd: 0.01 },

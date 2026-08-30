@@ -324,7 +324,13 @@ async function runStep(
     return true;
   }
 
-  const tools = await runToolCalls(request, deps, streamed.calls, budget.stepsTaken);
+  const tools = await runToolCalls(
+    request,
+    deps,
+    streamed.calls,
+    budget.stepsTaken,
+    toolLimitsFor(deps.limits, budget),
+  );
   session.append(...tools.messages);
 
   if (tools.abort) {
@@ -347,11 +353,31 @@ interface ToolPhaseOutcome {
   readonly cancelled: boolean;
 }
 
+/**
+ * Tool limits narrowed to what the turn actually has left.
+ *
+ * `ToolLimits.timeoutMs` bounds one tool call and `TurnBudget.maxWallClockMs` bounds the
+ * whole turn, and without this the two never met: the turn ceiling was consulted only
+ * *between* steps, so one long call — a hanging command, a test suite that never returns —
+ * ran to the per-tool timeout and overshot the turn budget by however long that took.
+ * Measured against a real model, `--max-time 15` produced a 98.7-second run.
+ *
+ * The floor is the smaller of the two, because both are ceilings and honouring a budget
+ * means honouring the tighter one. An unbounded turn is left exactly as configured, so
+ * this cannot become a ceiling nobody asked for.
+ */
+function toolLimitsFor(limits: ToolLimits, budget: BudgetTracker): ToolLimits {
+  const remaining = budget.remainingWallClockMs();
+  if (remaining === undefined) return limits;
+  return { ...limits, timeoutMs: Math.min(limits.timeoutMs, remaining) };
+}
+
 async function runToolCalls(
   request: TurnRequest,
   deps: TurnDeps,
   calls: readonly ToolCall[],
   step: number,
+  limits: ToolLimits,
 ): Promise<ToolPhaseOutcome> {
   const { session, emitter, signal } = request;
   const messages: ConversationMessage[] = [];
@@ -394,7 +420,7 @@ async function runToolCalls(
         workspaceRoot: session.workspaceRoot,
         sessionId: session.id,
         turnId: request.turnId,
-        limits: deps.limits,
+        limits,
         signal,
         search: deps.search,
         todos: session.todos,
