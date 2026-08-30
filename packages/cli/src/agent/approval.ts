@@ -41,12 +41,41 @@ export interface LineReader {
   close(): void;
 }
 
-/** `node:readline` behind the {@link LineReader} seam. */
-export function stdinReader(): LineReader {
+/** Streams {@link stdinReader} reads from and writes the prompt to. Injectable for tests. */
+export interface StdinReaderOptions {
+  readonly input?: NodeJS.ReadableStream;
+  /**
+   * Where the prompt text goes. **Defaults to stderr, and must not be stdout.**
+   *
+   * See {@link stdinReader}.
+   */
+  readonly output?: NodeJS.WritableStream;
+}
+
+/**
+ * `node:readline` behind the {@link LineReader} seam.
+ *
+ * The prompt is written to **stderr**, not stdout, and that is load-bearing rather than
+ * cosmetic. Under `--json` stdout carries the JSONL event stream and nothing else — the
+ * contract `writeJson` states — so a prompt written there lands in the middle of an event
+ * object and makes that line unparseable. The line it corrupts is whichever event the
+ * approval was gating, which is exactly the `tool.started` a consumer needs, so the
+ * trajectory stops being replayable at the first approval.
+ *
+ * Every other part of the approval UI already goes to stderr via `io.err`, so stdout was
+ * also the one stream the question did not belong on for ordering reasons: the prompt and
+ * the block explaining what is being approved were flushed independently and interleaved
+ * out of order.
+ */
+export function stdinReader(options: StdinReaderOptions = {}): LineReader {
   let rl: Interface | undefined;
   return {
     async read(prompt: string): Promise<string | undefined> {
-      rl ??= createInterface({ input: process.stdin, output: process.stdout, terminal: false });
+      rl ??= createInterface({
+        input: options.input ?? process.stdin,
+        output: options.output ?? process.stderr,
+        terminal: false,
+      });
       try {
         return await rl.question(prompt);
       } catch {

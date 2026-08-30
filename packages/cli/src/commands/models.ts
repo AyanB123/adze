@@ -54,14 +54,31 @@ interface ModelRow {
   readonly provider: string;
   readonly model: string;
   readonly capabilities: ModelCapabilities;
-  /** True when the owning provider has a credential resolved. */
+  /** True when a request to the owning provider could actually be made. */
   readonly configured: boolean;
+}
+
+/**
+ * Whether a request to this provider could be made at all.
+ *
+ * Mirrors `AiSdkGateway.assertCredential`, and has to: an `openai-compatible` endpoint —
+ * a local llama.cpp or Ollama server, or a gateway on localhost — legitimately needs no
+ * credential, and that check skips them for exactly that reason. Treating a missing key
+ * as "unconfigured" here hid every model behind a keyless local endpoint, including the
+ * one `defaultModel` names, so the list disagreed with what `adze run` was about to do.
+ * A list that omits the model the next command will use is worse than no list.
+ *
+ * A credential is still *reported* when absent, because an OpenAI-compatible endpoint
+ * that is a hosted gateway does need one. Optional is not the same as unnecessary.
+ */
+function isUsable(provider: ResolvedProvider): boolean {
+  return provider.apiKey !== undefined || provider.kind === 'openai-compatible';
 }
 
 function rowsFor(providers: readonly ResolvedProvider[], includeAll: boolean): ModelRow[] {
   const rows: ModelRow[] = [];
   for (const provider of providers) {
-    const configured = provider.apiKey !== undefined;
+    const configured = isUsable(provider);
     if (!configured && !includeAll) continue;
 
     for (const entry of modelsOf(provider.id)) {
@@ -92,14 +109,31 @@ function rowsFor(providers: readonly ResolvedProvider[], includeAll: boolean): M
   return rows;
 }
 
+/**
+ * How a provider's credential state reads.
+ *
+ * A keyless `openai-compatible` entry is not a misconfiguration, so it is not styled as a
+ * warning and is not given an instruction to set a variable. It is reported as optional
+ * rather than as unnecessary, because the same transport is how a hosted gateway is
+ * configured and that one does need a key — the difference is not something this command
+ * can determine without making the request it promises not to make.
+ */
+function credentialLine(provider: ResolvedProvider, style: Style): string {
+  if (provider.apiKeySource !== undefined) {
+    return style.good(`key from ${provider.apiKeySource}`);
+  }
+  if (provider.kind === 'openai-compatible') {
+    return style.dim(
+      `no credential — optional for openai-compatible (set ${provider.apiKeyEnvCandidates.join(' or ')} if the endpoint needs one)`,
+    );
+  }
+  return style.warn(`no credential (set ${provider.apiKeyEnvCandidates.join(' or ')})`);
+}
+
 function renderProviders(providers: readonly ResolvedProvider[], io: Io, style: Style): void {
   io.out(`${style.bold('Providers')}\n`);
   for (const provider of providers) {
-    const credential =
-      provider.apiKeySource === undefined
-        ? style.warn(`no credential (set ${provider.apiKeyEnvCandidates.join(' or ')})`)
-        : style.good(`key from ${provider.apiKeySource}`);
-    io.out(`${field(provider.id, credential)}\n`);
+    io.out(`${field(provider.id, credentialLine(provider, style))}\n`);
     if (provider.baseURL !== undefined) {
       io.out(`${field('', style.dim(provider.baseURL))}\n`);
     }
@@ -156,6 +190,11 @@ export async function runModels(options: ModelsOptions, io: Io): Promise<ExitCod
         credentialConfigured: provider.apiKey !== undefined,
         credentialSource: provider.apiKeySource ?? null,
         credentialCandidates: provider.apiKeyEnvCandidates,
+        /**
+         * Whether a request could be made. Distinct from `credentialConfigured`, because
+         * an openai-compatible endpoint may need no credential at all.
+         */
+        usable: isUsable(provider),
         baseUrl: provider.baseURL ?? null,
         defaultModel: provider.defaultModel ?? null,
       })),

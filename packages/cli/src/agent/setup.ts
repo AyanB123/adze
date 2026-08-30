@@ -15,6 +15,7 @@ import {
   type EventSink,
   NodeSubprocessBroker,
   type SandboxBroker,
+  type SearchBackend,
   scrubEnvironment,
 } from '@adze/core';
 import type {
@@ -33,6 +34,7 @@ import {
 } from '@adze/providers';
 import { CLI_VERSION } from '../version.js';
 import type { ApprovalChannel } from './approval.js';
+import { RetrievalSearchBackend } from './search.js';
 
 export interface AgentSetup {
   readonly engine: Engine;
@@ -58,6 +60,15 @@ export interface AgentOptions {
   readonly approvalChannel: ApprovalChannel;
   /** Injected by tests so no real subprocess or network is involved. */
   readonly broker?: SandboxBroker;
+  /**
+   * Retrieval, for `glob`, `grep`, and `symbols`.
+   *
+   * Defaults to `@adze/retrieval` over the workspace. Injectable so a test can drive the
+   * three tools without ripgrep on the machine running it — and so the default is a
+   * decision made here rather than an absence nobody notices, which is how these tools
+   * came to be dead in the CLI in the first place.
+   */
+  readonly search?: SearchBackend;
   /**
    * Injected by tests. Passed straight through to the gateway.
    *
@@ -110,6 +121,10 @@ export function buildAgent(options: AgentOptions): AgentSetup {
     // from the transcript. This is a mitigation, not a boundary — only OS-level
     // containment closes the rest, and on Windows there is none (ADR-0007).
     broker: options.broker ?? new NodeSubprocessBroker({ env: scrubEnvironment(process.env) }),
+    // Without this, `glob`, `grep`, and `symbols` report themselves unavailable and the
+    // agent falls back to `bash grep` — one approval prompt per search, and raw stdout
+    // for the model to scrape instead of ranked structured hits.
+    search: options.search ?? new RetrievalSearchBackend({ root: options.workspaceRoot }),
     sink: options.sink,
     engineInfo: { name: '@adze/cli', version: CLI_VERSION },
     requestApproval: options.approvalChannel.request,

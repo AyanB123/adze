@@ -7,6 +7,13 @@
  * ADR-0007 accepts shipping with that gap on the project's own primary development
  * platform, on the condition that we say so instead of letting a user infer
  * protection that is not there. This command is where we say it.
+ *
+ * The model-provider section is here for a plainer reason: this command is what
+ * `@adze/providers` and `adze run` both tell the user to run, and it used to report
+ * nothing whatsoever about providers — so a machine with no credential passed
+ * `doctor` cleanly and then failed on the first `adze run`. Nothing here probes an
+ * endpoint; "configured" is not "reachable", and invariant 5 forbids making the
+ * request that would tell the difference.
  */
 
 import { execFile } from 'node:child_process';
@@ -21,13 +28,27 @@ import {
   type SandboxEnforcement,
   sandboxEnforcement,
 } from '@adze/protocol';
-import { EXIT, type ExitCode, field, type Io, styleFor, writeJson } from '../output.js';
+import {
+  type ResolvedConfig,
+  type ResolvedProvider,
+  type ResolveOptions,
+  resolveConfig,
+} from '@adze/providers';
+import { EXIT, type ExitCode, field, type Io, type Style, styleFor, writeJson } from '../output.js';
 import { CLI_VERSION, MINIMUM_NODE_VERSION } from '../version.js';
 
 const execFileAsync = promisify(execFile);
 
 export interface DoctorOptions {
   readonly json?: boolean;
+  /**
+   * Isolates provider resolution from the real environment.
+   *
+   * Without it a test of the provider section asserts whatever the developer happens to
+   * have exported, which is a test that reports the machine rather than the code. Same
+   * seam and same reason as `runModels`.
+   */
+  readonly __testHooks?: { readonly resolve?: ResolveOptions };
 }
 
 interface Check {
@@ -157,11 +178,128 @@ function findRipgrep(): { value: string; ok: boolean } {
   };
 }
 
-async function buildChecks(): Promise<Check[]> {
+/**
+ * The provider section.
+ *
+ * `doctor` is documented as the report on the whole environment, and both
+ * `@adze/providers` and `adze run` point users at it — but it said nothing at all about
+ * model providers, which is the one piece of configuration without which no other part of
+ * the tool does anything. A user with no credential got a clean bill of health and then a
+ * failure on their first `adze run`.
+ *
+ * Reported, never probed: no request is made to any endpoint. Invariant 5 forbids an
+ * outbound call the user did not ask for, so "configured" here means configured, not
+ * reachable — and the wording says so.
+ *
+ * A missing provider is a **warning, not a failure**. `doctor`'s stated rule is that
+ * optional tooling missing still exits 0, and making the exit code depend on whether the
+ * machine happens to export a key would make it depend on ambient state in CI. `run` and
+ * `models` both already refuse with a message naming the variables to set.
+ */
+interface ProviderReport {
+  readonly id: string;
+  readonly kind: string;
+  /** A request could be made: a key resolved, or the transport does not require one. */
+  readonly usable: boolean;
+  /** Which variable or config key supplied the key. Never the value. */
+  readonly credentialSource: string | undefined;
+  readonly baseURL: string | undefined;
+  readonly defaultModel: string | undefined;
+}
+
+/**
+ * Whether a request to this provider could be made.
+ *
+ * Mirrors `AiSdkGateway.assertCredential` and `runModels`: an `openai-compatible` endpoint
+ * may legitimately need no credential, so a missing key there is not a defect. All three
+ * must agree, or `doctor` reports a provider as unusable that `run` then uses.
+ */
+function providerUsable(provider: ResolvedProvider): boolean {
+  return provider.apiKey !== undefined || provider.kind === 'openai-compatible';
+}
+
+function toReport(provider: ResolvedProvider): ProviderReport {
+  return {
+    id: provider.id,
+    kind: provider.kind,
+    usable: providerUsable(provider),
+    credentialSource: provider.apiKeySource,
+    baseURL: provider.baseURL,
+    defaultModel: provider.defaultModel,
+  };
+}
+
+/** Resolution outcome, with a malformed config file reported rather than thrown. */
+interface ProviderSection {
+  readonly providers: readonly ProviderReport[];
+  readonly defaultModel: string | undefined;
+  readonly sources: readonly string[];
+  /** Set when `.adze/providers.json` could not be read. */
+  readonly error: string | undefined;
+}
+
+function buildProviderSection(options: DoctorOptions): ProviderSection {
+  let config: ResolvedConfig;
+  try {
+    config = resolveConfig({ cwd: process.cwd(), ...options.__testHooks?.resolve });
+  } catch (cause) {
+    // A malformed providers file must not take `doctor` down: this is the command a user
+    // runs *because* something is wrong, so it has to survive the thing that is wrong.
+    return {
+      providers: [],
+      defaultModel: undefined,
+      sources: [],
+      error: cause instanceof Error ? cause.message : String(cause),
+    };
+  }
+  return {
+    providers: config.providers.map(toReport),
+    defaultModel: config.defaultModel,
+    sources: config.sources,
+    error: undefined,
+  };
+}
+
+function renderProviders(section: ProviderSection, io: Io, style: Style): void {
+  io.out(`${style.bold('Model providers')}\n`);
+
+  if (section.error !== undefined) {
+    io.out(`${field('config', style.bad('unreadable'))}\n`);
+    io.out(`       ${style.dim(section.error)}\n\n`);
+    return;
+  }
+
+  for (const provider of section.providers) {
+    const credential =
+      provider.credentialSource !== undefined
+        ? style.good(`key from ${provider.credentialSource}`)
+        : provider.usable
+          ? style.dim('no credential — optional for openai-compatible')
+          : style.warn('no credential');
+    io.out(`  ${provider.usable ? style.good('ok  ') : style.warn('warn')} ${provider.id.padEnd(10)} ${provider.kind} · ${credential}\n`);
+    if (provider.baseURL !== undefined) {
+      io.out(`                  ${style.dim(provider.baseURL)}\n`);
+    }
+    if (provider.defaultModel !== undefined) {
+      io.out(`                  ${style.dim(`default model: ${provider.defaultModel}`)}\n`);
+    }
+  }
+
+  io.out(`${field('default model', section.defaultModel ?? style.dim('none set'))}\n`);
+  if (section.sources.length > 0) {
+    io.out(`${field('config read from', section.sources.join(', '))}\n`);
+  }
+  io.out(
+    `\n  ${style.dim('Reported as configured, not as reachable: doctor makes no network call.')}\n\n`,
+  );
+}
+
+async function buildChecks(section: ProviderSection): Promise<Check[]> {
   const nodeOk = compareSemver(process.versions.node, MINIMUM_NODE_VERSION) >= 0;
   const ripgrep = findRipgrep();
   const pnpm = await versionOf('pnpm', ['--version']);
   const git = await versionOf('git', ['--version']);
+  const usable = section.providers.filter((provider) => provider.usable);
 
   return [
     {
@@ -195,6 +333,22 @@ async function buildChecks(): Promise<Check[]> {
         ? {}
         : {
             hint: 'Retrieval will vendor @vscode/ripgrep — see docs/roadmap.md M1. Installing `rg` yourself also works.',
+          }),
+    },
+    {
+      name: 'provider',
+      ok: usable.length > 0,
+      value:
+        section.error !== undefined
+          ? 'config unreadable'
+          : usable.length > 0
+            ? `${usable.length} usable (${usable.map((provider) => provider.id).join(', ')})`
+            : 'none usable',
+      required: false,
+      ...(usable.length > 0 && section.error === undefined
+        ? {}
+        : {
+            hint: 'No model provider is usable, so `adze run` cannot reach a model. Set ANTHROPIC_API_KEY or OPENAI_API_KEY, or point .adze/providers.json at a local endpoint. `adze models` lists what is configured.',
           }),
     },
   ];
@@ -245,7 +399,8 @@ function renderSandbox(enforcement: SandboxEnforcement, io: Io): void {
 export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCode> {
   const json = options.json === true;
   const s = styleFor(json);
-  const checks = await buildChecks();
+  const section = buildProviderSection(options);
+  const checks = await buildChecks(section);
   const enforcement = sandboxEnforcement(process.platform, DEFAULT_SANDBOX_MODE);
   const failed = checks.filter((c) => c.required && !c.ok);
 
@@ -264,6 +419,22 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
         required: c.required,
         ...(c.hint === undefined ? {} : { hint: c.hint }),
       })),
+      providers: {
+        // Configured, not reachable. No request is made to any endpoint.
+        probed: false,
+        defaultModel: section.defaultModel ?? null,
+        sources: section.sources,
+        ...(section.error === undefined ? {} : { error: section.error }),
+        entries: section.providers.map((provider) => ({
+          id: provider.id,
+          kind: provider.kind,
+          usable: provider.usable,
+          // The variable *name* that supplied the key, never the value.
+          credentialSource: provider.credentialSource ?? null,
+          baseUrl: provider.baseURL ?? null,
+          defaultModel: provider.defaultModel ?? null,
+        })),
+      },
       sandbox: {
         defaultMode: DEFAULT_SANDBOX_MODE,
         defaultApprovalPolicy: DEFAULT_APPROVAL_POLICY,
@@ -289,6 +460,7 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   }
   io.out('\n');
 
+  renderProviders(section, io, s);
   renderSandbox(enforcement, io);
 
   if (failed.length > 0) {
