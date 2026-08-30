@@ -22,9 +22,9 @@
  * can open files, and that is enforceable only if the reader is injected.
  */
 
+import { compileGlobSet, toPosix } from './glob.js';
 import type { ContextProviderContribution, PluginDiagnostic } from './manifest.js';
 import { errorDiagnostic } from './manifest.js';
-import { compileGlobSet, toPosix } from './glob.js';
 import { callGuest, type GuestModule } from './wasm.js';
 
 /** One piece of retrieved content, as the spec's Rust example returns it. */

@@ -155,13 +155,17 @@ function hasInvoke(value: unknown): value is JsGuestExports {
  * path outside the directories the host named, so a manifest cannot reach a file
  * elsewhere on disk even if path validation upstream were bypassed.
  */
-export function jsModuleRuntime(options: { readonly allowedRoots: readonly string[] }): GuestRuntime {
+export function jsModuleRuntime(options: {
+  readonly allowedRoots: readonly string[];
+}): GuestRuntime {
   return {
     kind: 'js',
     enforcesMemoryLimit: false,
     async load(request: GuestLoadRequest): Promise<GuestLoadOutcome> {
       const normalized = normalizePath(request.modulePath);
-      const permitted = options.allowedRoots.some((root) => isWithin(normalizePath(root), normalized));
+      const permitted = options.allowedRoots.some((root) =>
+        isWithin(normalizePath(root), normalized),
+      );
       if (!permitted) {
         return {
           ok: false,
@@ -184,7 +188,11 @@ export function jsModuleRuntime(options: { readonly allowedRoots: readonly strin
       }
 
       const candidate = (namespace as { default?: unknown }).default;
-      const exports = hasInvoke(namespace) ? namespace : hasInvoke(candidate) ? candidate : undefined;
+      const exports = hasInvoke(namespace)
+        ? namespace
+        : hasInvoke(candidate)
+          ? candidate
+          : undefined;
       if (exports === undefined) {
         return {
           ok: false,

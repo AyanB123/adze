@@ -75,7 +75,17 @@ describe('parseFrontmatter - the supported grammar', () => {
 
   it('keeps the body verbatim, including blank lines', () => {
     const document = data('---\nname: x\n---\nline one\n\nline three\n');
-    expect(document.body).toBe('\nline one\n\nline three\n');
+    expect(document.body).toBe('line one\n\nline three\n');
+  });
+
+  it('removes exactly one newline after the closing delimiter', () => {
+    // The newline that terminates the '---' line belongs to the delimiter, not to the
+    // prompt, so keeping it would start every command template and every subagent
+    // prompt with a blank line. A second newline is the author's and survives. This
+    // case exists because the assertion above was originally written expecting the
+    // delimiter's newline to be kept, which contradicted the documented contract on
+    // `FrontmatterDocument.body` and would have made the contract ambiguous.
+    expect(data('---\nname: x\n---\n\nbody\n').body).toBe('\nbody\n');
   });
 });
 
@@ -105,6 +115,34 @@ describe('parseFrontmatter - refusals', () => {
     for (const line of ['tools: &base [read]', '<<: *defaults', 'value: !!str x', 'prompt: |']) {
       expect(parseFrontmatter(`---\n${line}\n---\nbody`).ok).toBe(false);
     }
+  });
+
+  it('refuses an anchor or alias wherever a value may appear', () => {
+    // Regression. The line-level anchor rule required the anchor to be the last thing
+    // on the line, so the canonical `key: &anchor value` form was accepted and became
+    // the string '&base [read]'. Aliases inside an inline collection leaked the same
+    // way and became '*base'. Both produced a `tools` value a reviewer would read as a
+    // list and the engine would read as text — the exact divergence this parser exists
+    // to refuse, and worse than a parse error because nothing reported it.
+    for (const document of [
+      '---\ntools: &base [read]\n---\nbody',
+      '---\ntools: [*base]\n---\nbody',
+      '---\ntools: [read, *extra]\n---\nbody',
+      '---\nmodel: { prefer: *fast }\n---\nbody',
+      '---\npaths:\n  - *base\n---\nbody',
+      '---\npaths:\n  - &first docs/a.md\n---\nbody',
+    ]) {
+      expect(parseFrontmatter(document, 'a.md').ok).toBe(false);
+    }
+  });
+
+  it('still accepts a value that merely contains an ampersand or asterisk', () => {
+    // The indicator is only special at the start of an unquoted value, so narrowing
+    // the check to that position must not cost these.
+    const document = data('---\nname: Ben & Jerry\nglob: src/**/*.ts\n---\nbody');
+    expect(document.data.name).toBe('Ben & Jerry');
+    expect(document.data.glob).toBe('src/**/*.ts');
+    expect(data('---\nname: "&notananchor"\n---\nbody').data.name).toBe('&notananchor');
   });
 
   it('refuses a duplicate key rather than picking a winner', () => {
@@ -139,7 +177,9 @@ describe('parseFrontmatter - refusals', () => {
 });
 
 describe('typed readers', () => {
-  const document = data('---\nname: review\ntools: [read]\nmaxSteps: 5\nmodel: { prefer: fast }\n---\nb');
+  const document = data(
+    '---\nname: review\ntools: [read]\nmaxSteps: 5\nmodel: { prefer: fast }\n---\nb',
+  );
 
   it('reads a required string and explains a missing one', () => {
     expect(readString(document.data, 'name')).toEqual({ ok: true, value: 'review' });

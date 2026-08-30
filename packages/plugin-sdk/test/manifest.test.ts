@@ -117,9 +117,9 @@ describe('parseManifest - module paths cannot escape the plugin', () => {
   });
 
   it('rejects an absolute hook module on either platform', () => {
-    expect(codes({ contributes: { hooks: [{ event: 'tool.pre', module: '/etc/passwd' }] } })).toEqual([
-      'manifest-schema',
-    ]);
+    expect(
+      codes({ contributes: { hooks: [{ event: 'tool.pre', module: '/etc/passwd' }] } }),
+    ).toEqual(['manifest-schema']);
     expect(
       codes({ contributes: { hooks: [{ event: 'tool.pre', module: 'C:\\windows\\x.wasm' }] } }),
     ).toEqual(['manifest-schema']);
@@ -259,15 +259,17 @@ describe('hook contributions', () => {
   });
 
   it('rejects an unknown event rather than ignoring the hook', () => {
-    expect(codes({ contributes: { hooks: [{ event: 'tool.middle', module: 'h.wasm' }] } })).toEqual([
-      'manifest-schema',
-    ]);
+    expect(codes({ contributes: { hooks: [{ event: 'tool.middle', module: 'h.wasm' }] } })).toEqual(
+      ['manifest-schema'],
+    );
   });
 
   it('defaults timeoutMs and caps an absurd one', () => {
     expect(hookTimeoutMs({ event: 'tool.pre', module: 'h.wasm' })).toBe(DEFAULT_HOOK_TIMEOUT_MS);
     expect(
-      codes({ contributes: { hooks: [{ event: 'tool.pre', module: 'h.wasm', timeoutMs: 600000 }] } }),
+      codes({
+        contributes: { hooks: [{ event: 'tool.pre', module: 'h.wasm', timeoutMs: 600000 }] },
+      }),
     ).toEqual(['manifest-schema']);
   });
 

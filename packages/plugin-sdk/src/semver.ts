@@ -169,7 +169,9 @@ function desugar(token: string): ComparatorOutcome {
   if (!parsed.ok) return { ok: false, message: parsed.message };
   return {
     ok: true,
-    comparators: [{ operator: (rawOperator as Operator | undefined) ?? '=', version: parsed.version }],
+    comparators: [
+      { operator: (rawOperator as Operator | undefined) ?? '=', version: parsed.version },
+    ],
   };
 }
 

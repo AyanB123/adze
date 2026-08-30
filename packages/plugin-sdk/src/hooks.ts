@@ -422,7 +422,12 @@ export class HookHost {
             discardedBecause: `'${hook.pluginId}' denied the action`,
           });
         }
-        this.observer.record({ kind: 'denied', pluginId: hook.pluginId, event, reason: value.reason });
+        this.observer.record({
+          kind: 'denied',
+          pluginId: hook.pluginId,
+          event,
+          reason: value.reason,
+        });
         return { kind: 'deny', pluginId: hook.pluginId, reason: value.reason };
       }
 
@@ -442,7 +447,9 @@ export class HookHost {
       }
     }
 
-    return modifiedBy.length === 0 ? { kind: 'allow' } : { kind: 'modify', arguments: args, by: modifiedBy };
+    return modifiedBy.length === 0
+      ? { kind: 'allow' }
+      : { kind: 'modify', arguments: args, by: modifiedBy };
   }
 
   /**
@@ -491,13 +498,20 @@ export class HookHost {
         continue;
       }
       if (value.kind === 'allow') continue;
-      this.recordMalformed(hook, 'tool.post', `returned '${value.kind}'; expected replace or allow.`);
+      this.recordMalformed(
+        hook,
+        'tool.post',
+        `returned '${value.kind}'; expected replace or allow.`,
+      );
     }
     return text;
   }
 
   /** Fire a notify-only event. Nothing a hook returns is honoured. */
-  async fireNotification(event: 'edit.post' | 'session.turnEnd', payload: HookPayload): Promise<void> {
+  async fireNotification(
+    event: 'edit.post' | 'session.turnEnd',
+    payload: HookPayload,
+  ): Promise<void> {
     for (const hook of this.forEvent(event)) {
       await this.invoke(hook, payloadJson(payload));
     }
@@ -586,7 +600,11 @@ export class HookHost {
     const decoded = decodeHookOutput(outcome.value);
     if (!decoded.ok) {
       this.recordMalformed(hook, hook.event, decoded.message);
-      return { kind: 'failure', treatedAs, summary: `returned an unusable value: ${decoded.message}` };
+      return {
+        kind: 'failure',
+        treatedAs,
+        summary: `returned an unusable value: ${decoded.message}`,
+      };
     }
     return { kind: 'value', value: decoded.output };
   }

@@ -7,14 +7,20 @@
  */
 
 import type { JsonValue } from '@adze/protocol';
-import type { GuestModule, GuestRuntime } from '../src/wasm.js';
-import type { PluginFileSystem } from '../src/loader.js';
 import type { ContextFileSystem } from '../src/context.js';
+import type { PluginFileSystem } from '../src/loader.js';
+import type { GuestModule, GuestRuntime } from '../src/wasm.js';
 
-export type GuestHandler = (functionName: string, input: JsonValue) => JsonValue | Promise<JsonValue>;
+export type GuestHandler = (
+  functionName: string,
+  input: JsonValue,
+) => JsonValue | Promise<JsonValue>;
 
 /** A guest whose behaviour a test writes directly. */
-export function fakeGuest(handler: GuestHandler, runtime: 'wasm' | 'js' | 'native' = 'js'): GuestModule {
+export function fakeGuest(
+  handler: GuestHandler,
+  runtime: 'wasm' | 'js' | 'native' = 'js',
+): GuestModule {
   return { runtime, invoke: async (functionName, input) => await handler(functionName, input) };
 }
 

@@ -36,12 +36,7 @@
  * command inherits the session's allowlist unchanged.
  */
 
-import {
-  parseFrontmatter,
-  readMapping,
-  readString,
-  readStringList,
-} from './frontmatter.js';
+import { parseFrontmatter, readMapping, readString, readStringList } from './frontmatter.js';
 import { errorDiagnostic, type PluginDiagnostic, warningDiagnostic } from './manifest.js';
 import { describeFindings, scanForHiddenCharacters } from './unicode.js';
 
@@ -65,7 +60,11 @@ export interface SlashCommand {
 }
 
 export type CommandParseOutcome =
-  | { readonly ok: true; readonly command: SlashCommand; readonly warnings: readonly PluginDiagnostic[] }
+  | {
+      readonly ok: true;
+      readonly command: SlashCommand;
+      readonly warnings: readonly PluginDiagnostic[];
+    }
   | { readonly ok: false; readonly diagnostics: readonly PluginDiagnostic[] };
 
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -179,7 +178,9 @@ export function parseSlashCommand(
  * authorizes through the gate, and executes — the same path a model-issued command
  * takes. This package deliberately has no way to spawn a process.
  */
-export type CommandRunner = (command: string) => Promise<{ readonly ok: boolean; readonly text: string }>;
+export type CommandRunner = (
+  command: string,
+) => Promise<{ readonly ok: boolean; readonly text: string }>;
 
 /** Resolves an `@name` reference. `undefined` when no provider claims the trigger. */
 export type TriggerResolver = (
@@ -293,9 +294,7 @@ export async function interpolate(
       // The status is stated rather than implied. A model reading command output
       // that failed should know it failed; silently inlining stderr as if it were
       // stdout is how a model concludes a test suite passed.
-      output += result.ok
-        ? clipped
-        : `[command failed: ${shellCommand}]\n${clipped}`;
+      output += result.ok ? clipped : `[command failed: ${shellCommand}]\n${clipped}`;
       continue;
     }
 

@@ -43,10 +43,7 @@
 
 import { readFile, stat } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
-import {
-  parseSubagent,
-  type SubagentDefinition,
-} from './agents.js';
+import { parseSubagent, type SubagentDefinition } from './agents.js';
 import { parseSlashCommand, type SlashCommand } from './commands.js';
 import {
   buildGlobProvider,
@@ -56,21 +53,21 @@ import {
 } from './context.js';
 import { HookHost, type HookHostOptions, type HookInstance } from './hooks.js';
 import {
-  checkEngineCompatibility,
   type ContextProviderContribution,
+  checkEngineCompatibility,
   errorDiagnostic,
   type HookRuntime,
   hookTimeoutMs,
   namespaceOf,
-  parseManifest,
   type PluginDiagnostic,
   type PluginManifest,
   type PluginPermissions,
+  parseManifest,
   resolveRuntime,
   warningDiagnostic,
 } from './manifest.js';
+import { type ToolTranslation, translateToolContribution } from './tools.js';
 import { partitionUi, type SurfaceUiContribution } from './ui.js';
-import { translateToolContribution, type ToolTranslation } from './tools.js';
 import { describeFindings, scanForHiddenCharacters } from './unicode.js';
 import {
   DEFAULT_GUEST_LIMITS,
@@ -248,7 +245,11 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
     const runtimeChoice = resolveRuntime(contribution.module, contribution.runtime);
     if (!runtimeChoice.ok) {
       diagnostics.push(
-        errorDiagnostic('module-unloadable', `plugin '${manifest.id}' ${field}: ${runtimeChoice.message}`, field),
+        errorDiagnostic(
+          'module-unloadable',
+          `plugin '${manifest.id}' ${field}: ${runtimeChoice.message}`,
+          field,
+        ),
       );
       continue;
     }
@@ -296,7 +297,11 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
     const runtimeChoice = resolveRuntime(contribution.module, undefined);
     if (!runtimeChoice.ok) {
       diagnostics.push(
-        errorDiagnostic('module-unloadable', `plugin '${manifest.id}' ${field}: ${runtimeChoice.message}`, field),
+        errorDiagnostic(
+          'module-unloadable',
+          `plugin '${manifest.id}' ${field}: ${runtimeChoice.message}`,
+          field,
+        ),
       );
       continue;
     }
@@ -465,7 +470,9 @@ async function loadGuest(
     if (!scan.ok) {
       return {
         ok: false,
-        diagnostics: [errorDiagnostic('hidden-characters', describeFindings(modulePath, scan.findings), field)],
+        diagnostics: [
+          errorDiagnostic('hidden-characters', describeFindings(modulePath, scan.findings), field),
+        ],
       };
     }
   }
@@ -536,7 +543,10 @@ async function readReferenced(
 export interface PluginSet {
   readonly plugins: readonly LoadedPlugin[];
   /** Per-root failures. A plugin that refuses does not stop the others. */
-  readonly failures: readonly { readonly root: string; readonly diagnostics: readonly PluginDiagnostic[] }[];
+  readonly failures: readonly {
+    readonly root: string;
+    readonly diagnostics: readonly PluginDiagnostic[];
+  }[];
   readonly notices: readonly PluginDiagnostic[];
 }
 

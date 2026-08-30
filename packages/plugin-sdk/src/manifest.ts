@@ -466,7 +466,13 @@ function validateStructure(manifest: PluginManifest, label: string): PluginDiagn
     }
   }
 
-  diagnostics.push(...duplicates(label, 'contributes.tools', tools.map((tool) => tool.name)));
+  diagnostics.push(
+    ...duplicates(
+      label,
+      'contributes.tools',
+      tools.map((tool) => tool.name),
+    ),
+  );
 
   const providers = manifest.contributes?.contextProviders ?? [];
   diagnostics.push(
@@ -624,7 +630,10 @@ export type RuntimeResolution =
   | { readonly ok: true; readonly runtime: HookRuntime }
   | { readonly ok: false; readonly message: string };
 
-export function resolveRuntime(module: string, declared: HookRuntime | undefined): RuntimeResolution {
+export function resolveRuntime(
+  module: string,
+  declared: HookRuntime | undefined,
+): RuntimeResolution {
   if (declared !== undefined) return { ok: true, runtime: declared };
   const lower = module.toLowerCase();
   if (lower.endsWith('.wasm')) return { ok: true, runtime: 'wasm' };

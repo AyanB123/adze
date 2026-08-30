@@ -217,10 +217,7 @@ function filesystemRank(level: PluginPermissions['filesystem']): number {
  * parent's as an argument. There is no overload that omits it, so "never broader
  * permissions" is a property of the signature rather than a rule to remember.
  */
-export function narrowSubagent(
-  definition: SubagentDefinition,
-  parent: ParentGrant,
-): NarrowOutcome {
+export function narrowSubagent(definition: SubagentDefinition, parent: ParentGrant): NarrowOutcome {
   const parentTools = new Set(parent.tools);
   const unknown = definition.tools.filter((tool) => !parentTools.has(tool));
   if (unknown.length > 0) {

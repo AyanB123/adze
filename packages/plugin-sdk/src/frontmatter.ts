@@ -213,7 +213,14 @@ function parseBlock(
 }
 
 function unsupportedConstruct(trimmed: string): string | undefined {
-  if (trimmed.startsWith('&') || / &[A-Za-z0-9_-]+\s*$/.test(trimmed)) {
+  // Only the degenerate case where a line *begins* with an anchor is caught here.
+  // An anchor in value position (`tools: &base [read]`) is caught in `parseScalar`,
+  // which is the only place that knows the value is unquoted and in node position.
+  // A line-level regex cannot tell `tools: &base [read]` from
+  // `description: "a: &b"`, and the earlier one here matched neither: it required
+  // the anchor to be the last thing on the line, so the canonical form — where the
+  // anchor precedes the value it names — was accepted as an ordinary string.
+  if (trimmed.startsWith('&')) {
     return 'YAML anchors are not supported. Write the value out.';
   }
   if (/:\s*\*[A-Za-z0-9_-]+\s*$/.test(trimmed)) {
@@ -312,6 +319,27 @@ function parseScalar(raw: string): ScalarOutcome {
       return { ok: false, message: `unterminated quoted string: ${raw}` };
     }
     return { ok: true, value: raw.slice(1, -1) };
+  }
+
+  // YAML node indicators. `&name` declares an anchor, `*name` refers to one, and both
+  // are refused for the reason at the top of this file: they let the value that is
+  // enforced differ from the value a reviewer read. The check belongs here rather than
+  // on the raw line because this is the only point that knows a value is both unquoted
+  // and in node position, so it also covers the positions a line-level regex cannot
+  // see — an anchor or alias inside an inline sequence (`tools: [*base]`), inside an
+  // inline mapping, or as a block-sequence item. Those parsed as the strings '*base'
+  // and '&base [read]' before, which is the silent divergence this module exists to
+  // prevent. A value that genuinely starts with '&' or '*' is written quoted, and the
+  // branch above has already returned for that case.
+  if (raw.startsWith('&')) {
+    return { ok: false, message: 'YAML anchors are not supported. Write the value out.' };
+  }
+  if (raw.startsWith('*')) {
+    return {
+      ok: false,
+      message:
+        'YAML aliases are not supported: an alias lets the enforced value differ from the one a reviewer reads.',
+    };
   }
 
   // Strip a trailing comment only when a space precedes the '#', so a value such
