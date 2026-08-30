@@ -92,10 +92,7 @@ export interface Comparison {
  * Order matters. Insufficient evidence is reported before anything about the size of
  * the difference, because with two attempts the difference is not a quantity yet.
  */
-export function compareToBaseline(
-  ours: PassRateEstimate | null,
-  baseline: Baseline,
-): Comparison {
+export function compareToBaseline(ours: PassRateEstimate | null, baseline: Baseline): Comparison {
   if (ours === null) {
     return {
       verdict: 'insufficient-evidence',
@@ -114,8 +111,7 @@ export function compareToBaseline(
   const magnitude = Math.abs(deltaPoints);
   const direction = deltaPoints > 0 ? 'ahead of' : 'behind';
 
-  const combinedSem =
-    Math.sqrt(ours.sem ** 2 + (baseline.sem ?? 0) ** 2) * 100 * SEM_MULTIPLE;
+  const combinedSem = Math.sqrt(ours.sem ** 2 + (baseline.sem ?? 0) ** 2) * 100 * SEM_MULTIPLE;
 
   if (magnitude < NOISE_FLOOR_POINTS) {
     return {
@@ -369,8 +365,10 @@ export function checkCitation(
       );
   }
 
-  if ((citation.url !== undefined || citation.methodologyUrl !== undefined) &&
-    citation.retrievedAt === undefined) {
+  if (
+    (citation.url !== undefined || citation.methodologyUrl !== undefined) &&
+    citation.retrievedAt === undefined
+  ) {
     problems.push(
       "a cited URL requires 'retrievedAt' — leaderboards change and an undated citation " +
         'cannot be checked against what the page said',

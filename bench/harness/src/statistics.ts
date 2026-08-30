@@ -83,8 +83,7 @@ export function estimatePassRate(attemptRates: readonly number[]): AttemptSummar
   }
 
   const mean = attemptRates.reduce((sum, rate) => sum + rate, 0) / n;
-  const variance =
-    attemptRates.reduce((sum, rate) => sum + (rate - mean) ** 2, 0) / (n - 1);
+  const variance = attemptRates.reduce((sum, rate) => sum + (rate - mean) ** 2, 0) / (n - 1);
   const stdDev = Math.sqrt(variance);
 
   return {
@@ -137,9 +136,7 @@ export function looksLikeMaxOverN(
   if (max - min <= tolerance) return false;
 
   const mean = sum / attemptRates.length;
-  return (
-    Math.abs(reportedMean - max) <= tolerance && Math.abs(reportedMean - mean) > tolerance
-  );
+  return Math.abs(reportedMean - max) <= tolerance && Math.abs(reportedMean - mean) > tolerance;
 }
 
 /** `51.7% ± 0.84` — percentage points, matching how the public boards print it. */
