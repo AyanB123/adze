@@ -97,63 +97,15 @@ export function translateToolContribution(
   permissions: PluginPermissions,
   environment: Readonly<Record<string, string | undefined>>,
 ): ToolTranslationOutcome {
-  const diagnostics: PluginDiagnostic[] = [];
-  const warnings: PluginDiagnostic[] = [];
-  const declared = new Set(permissions.env);
-  const env: Record<string, string> = {};
+  const resolved = resolveServerEnv(
+    pluginId,
+    contribution.env ?? {},
+    new Set(permissions.env),
+    environment,
+  );
+  if (resolved.diagnostics.length > 0) return { ok: false, diagnostics: resolved.diagnostics };
 
-  for (const [key, rawValue] of Object.entries(contribution.env ?? {})) {
-    const reference = ENV_REFERENCE.exec(rawValue);
-    if (reference === null) {
-      // A literal value. Almost always a mistake for a credential, and worth
-      // saying so: a token committed to a manifest is a token in git history.
-      if (/token|secret|key|password/i.test(key)) {
-        warnings.push(
-          warningDiagnostic(
-            'permission-narrowed',
-            `plugin '${pluginId}' sets '${key}' to a literal value in its manifest rather ` +
-              `than to \${env:${key}}. A credential in a manifest is a credential in git.`,
-            'contributes.tools',
-          ),
-        );
-      }
-      env[key] = rawValue;
-      continue;
-    }
-
-    const variable = reference[1];
-    if (variable === undefined) continue;
-
-    if (!declared.has(variable)) {
-      diagnostics.push(
-        errorDiagnostic(
-          'transport-fields',
-          `plugin '${pluginId}' reads the environment variable '${variable}' but does not ` +
-            `list it in permissions.env. Add it, so the user sees it before installing: a ` +
-            `permission list that understates what a plugin reads is worse than none.`,
-          'permissions.env',
-        ),
-      );
-      continue;
-    }
-
-    const value = environment[variable];
-    if (value === undefined) {
-      diagnostics.push(
-        errorDiagnostic(
-          'transport-fields',
-          `plugin '${pluginId}' needs the environment variable '${variable}', which is not ` +
-            `set. Set it before starting Adze.`,
-          'contributes.tools',
-        ),
-      );
-      continue;
-    }
-    env[key] = value;
-  }
-
-  if (diagnostics.length > 0) return { ok: false, diagnostics };
-
+  const warnings = [...resolved.warnings];
   if (contribution.sandbox === 'danger-full-access') {
     warnings.push(
       warningDiagnostic(
@@ -165,6 +117,7 @@ export function translateToolContribution(
     );
   }
 
+  const env = resolved.env;
   const config: PluginMcpServerConfig = {
     name: namespacedServerName(pluginId, contribution.name),
     transport: contribution.transport,
@@ -196,4 +149,102 @@ export function translateToolContribution(
       warnings,
     },
   };
+}
+
+interface EnvResolution {
+  readonly env: Record<string, string>;
+  readonly diagnostics: readonly PluginDiagnostic[];
+  readonly warnings: readonly PluginDiagnostic[];
+}
+
+/**
+ * Resolve a server's `env` block against the plugin's declared permissions.
+ *
+ * Split out from {@link translateToolContribution} because it is the only part with a
+ * loop and three failure modes, and because it is the part where being wrong leaks a
+ * credential or starts a server with a blank one.
+ */
+function resolveServerEnv(
+  pluginId: string,
+  entries: Readonly<Record<string, string>>,
+  declared: ReadonlySet<string>,
+  environment: Readonly<Record<string, string | undefined>>,
+): EnvResolution {
+  const env: Record<string, string> = {};
+  const diagnostics: PluginDiagnostic[] = [];
+  const warnings: PluginDiagnostic[] = [];
+
+  for (const [key, rawValue] of Object.entries(entries)) {
+    const reference = ENV_REFERENCE.exec(rawValue);
+    if (reference === null) {
+      const warning = literalCredentialWarning(pluginId, key);
+      if (warning !== undefined) warnings.push(warning);
+      env[key] = rawValue;
+      continue;
+    }
+
+    const variable = reference[1];
+    if (variable === undefined) continue;
+
+    const resolved = resolveReference(pluginId, variable, declared, environment);
+    if (!resolved.ok) {
+      diagnostics.push(resolved.diagnostic);
+      continue;
+    }
+    env[key] = resolved.value;
+  }
+
+  return { env, diagnostics, warnings };
+}
+
+/**
+ * A literal value where a reference was expected.
+ *
+ * Almost always a mistake for a credential, and worth saying so: a token committed to
+ * a manifest is a token in git history.
+ */
+function literalCredentialWarning(pluginId: string, key: string): PluginDiagnostic | undefined {
+  if (!/token|secret|key|password/i.test(key)) return undefined;
+  return warningDiagnostic(
+    'permission-narrowed',
+    `plugin '${pluginId}' sets '${key}' to a literal value in its manifest rather ` +
+      `than to \${env:${key}}. A credential in a manifest is a credential in git.`,
+    'contributes.tools',
+  );
+}
+
+function resolveReference(
+  pluginId: string,
+  variable: string,
+  declared: ReadonlySet<string>,
+  environment: Readonly<Record<string, string | undefined>>,
+):
+  | { readonly ok: true; readonly value: string }
+  | { readonly ok: false; readonly diagnostic: PluginDiagnostic } {
+  if (!declared.has(variable)) {
+    return {
+      ok: false,
+      diagnostic: errorDiagnostic(
+        'transport-fields',
+        `plugin '${pluginId}' reads the environment variable '${variable}' but does not ` +
+          `list it in permissions.env. Add it, so the user sees it before installing: a ` +
+          `permission list that understates what a plugin reads is worse than none.`,
+        'permissions.env',
+      ),
+    };
+  }
+
+  const value = environment[variable];
+  if (value === undefined) {
+    return {
+      ok: false,
+      diagnostic: errorDiagnostic(
+        'transport-fields',
+        `plugin '${pluginId}' needs the environment variable '${variable}', which is not ` +
+          `set. Set it before starting Adze.`,
+        'contributes.tools',
+      ),
+    };
+  }
+  return { ok: true, value };
 }

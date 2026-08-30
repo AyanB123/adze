@@ -46,86 +46,121 @@ export function compileGlob(pattern: string): GlobOutcome {
   let braceDepth = 0;
 
   while (index < source.length) {
-    const character = source[index];
-    if (character === undefined) break;
-
-    switch (character) {
-      case '*': {
-        const doubled = source[index + 1] === '*';
-        if (doubled) {
-          const precededBySlash = index === 0 || source[index - 1] === '/';
-          const followedBySlash = source[index + 2] === '/';
-          if (precededBySlash && followedBySlash) {
-            // `a/**/b` must also match `a/b`. Consuming the trailing slash here is
-            // what makes the zero-segment case work.
-            regex += '(?:[^/]+/)*';
-            index += 3;
-          } else {
-            regex += '.*';
-            index += 2;
-          }
-        } else {
-          regex += '[^/]*';
-          index += 1;
-        }
-        break;
-      }
-      case '?':
-        regex += '[^/]';
-        index += 1;
-        break;
-      case '[': {
-        const close = source.indexOf(']', index + 1);
-        if (close < 0) {
-          return { ok: false, message: `'${pattern}' has an unclosed character class.` };
-        }
-        let body = source.slice(index + 1, close);
-        if (body.length === 0) {
-          return { ok: false, message: `'${pattern}' has an empty character class.` };
-        }
-        if (body.startsWith('!') || body.startsWith('^')) body = `^${body.slice(1)}`;
-        regex += `[${body.replace(/\\/g, '\\\\')}]`;
-        index = close + 1;
-        break;
-      }
-      case '{':
-        braceDepth += 1;
-        regex += '(?:';
-        index += 1;
-        break;
-      case '}':
-        if (braceDepth === 0) {
-          return { ok: false, message: `'${pattern}' closes a brace group that was never opened.` };
-        }
-        braceDepth -= 1;
-        regex += ')';
-        index += 1;
-        break;
-      case ',':
-        regex += braceDepth > 0 ? '|' : ',';
-        index += 1;
-        break;
-      default:
-        regex += character.replace(/[.+^$()|\\\-\]]/g, '\\$&');
-        index += 1;
-        break;
-    }
+    const token = translateToken(source, index, braceDepth, pattern);
+    if (!token.ok) return { ok: false, message: token.message };
+    regex += token.regex;
+    index = token.next;
+    braceDepth = token.braceDepth;
   }
 
   if (braceDepth > 0) {
     return { ok: false, message: `'${pattern}' has an unclosed brace group.` };
   }
 
-  let compiled: RegExp;
+  return compileAnchored(regex, pattern);
+}
+
+type TokenOutcome =
+  | {
+      readonly ok: true;
+      readonly regex: string;
+      readonly next: number;
+      readonly braceDepth: number;
+    }
+  | { readonly ok: false; readonly message: string };
+
+/**
+ * Translate the token starting at `index`.
+ *
+ * `braceDepth` is threaded through rather than closed over so the translation of one
+ * token is a pure function of its inputs — `{` and `}` are the only tokens whose
+ * meaning depends on what came before, and `,` is the only one that reads the depth.
+ */
+function translateToken(
+  source: string,
+  index: number,
+  braceDepth: number,
+  pattern: string,
+): TokenOutcome {
+  const character = source[index];
+  // The loop bound guarantees a character; `noUncheckedIndexedAccess` does not know it.
+  if (character === undefined) return { ok: true, regex: '', next: source.length, braceDepth };
+
+  switch (character) {
+    case '*': {
+      const star = translateStar(source, index);
+      return { ok: true, regex: star.regex, next: star.next, braceDepth };
+    }
+    case '?':
+      return { ok: true, regex: '[^/]', next: index + 1, braceDepth };
+    case '[':
+      return translateClass(source, index, pattern, braceDepth);
+    case '{':
+      return { ok: true, regex: '(?:', next: index + 1, braceDepth: braceDepth + 1 };
+    case '}':
+      if (braceDepth === 0) {
+        return { ok: false, message: `'${pattern}' closes a brace group that was never opened.` };
+      }
+      return { ok: true, regex: ')', next: index + 1, braceDepth: braceDepth - 1 };
+    case ',':
+      return { ok: true, regex: braceDepth > 0 ? '|' : ',', next: index + 1, braceDepth };
+    default:
+      return {
+        ok: true,
+        regex: character.replace(/[.+^$()|\\\-\]]/g, '\\$&'),
+        next: index + 1,
+        braceDepth,
+      };
+  }
+}
+
+function translateStar(
+  source: string,
+  index: number,
+): { readonly regex: string; readonly next: number } {
+  if (source[index + 1] !== '*') return { regex: '[^/]*', next: index + 1 };
+
+  const precededBySlash = index === 0 || source[index - 1] === '/';
+  const followedBySlash = source[index + 2] === '/';
+  // `a/**/b` must also match `a/b`. Consuming the trailing slash here is what makes
+  // the zero-segment case work.
+  if (precededBySlash && followedBySlash) return { regex: '(?:[^/]+/)*', next: index + 3 };
+  return { regex: '.*', next: index + 2 };
+}
+
+function translateClass(
+  source: string,
+  index: number,
+  pattern: string,
+  braceDepth: number,
+): TokenOutcome {
+  const close = source.indexOf(']', index + 1);
+  if (close < 0) {
+    return { ok: false, message: `'${pattern}' has an unclosed character class.` };
+  }
+  let body = source.slice(index + 1, close);
+  if (body.length === 0) {
+    return { ok: false, message: `'${pattern}' has an empty character class.` };
+  }
+  if (body.startsWith('!') || body.startsWith('^')) body = `^${body.slice(1)}`;
+  return {
+    ok: true,
+    regex: `[${body.replace(/\\/g, '\\\\')}]`,
+    next: close + 1,
+    braceDepth,
+  };
+}
+
+function compileAnchored(regex: string, pattern: string): GlobOutcome {
   try {
-    compiled = new RegExp(`^${regex}$`);
+    const compiled = new RegExp(`^${regex}$`);
+    return { ok: true, matcher: (path: string) => compiled.test(toPosix(path)) };
   } catch (error) {
     return {
       ok: false,
       message: `'${pattern}' could not be compiled: ${error instanceof Error ? error.message : String(error)}`,
     };
   }
-  return { ok: true, matcher: (path: string) => compiled.test(toPosix(path)) };
 }
 
 export type GlobSetOutcome =

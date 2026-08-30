@@ -221,8 +221,63 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
   const limits = options.guestLimits ?? DEFAULT_GUEST_LIMITS;
   const diagnostics: PluginDiagnostic[] = [];
 
-  // --- Surface 1: tools ----------------------------------------------------
-  const tools: ToolTranslation[] = [];
+  const tools = collectTools(manifest, permissions, options);
+  const hooks = await collectHooks(manifest, root, limits, options, files);
+  const contextProviders = await collectContextProviders(manifest, root, limits, options, files);
+  const commands = await collectCommands(manifest, root, files);
+  const agents = await collectAgents(manifest, root, files);
+
+  for (const surface of [tools, hooks, contextProviders, commands, agents]) {
+    diagnostics.push(...surface.diagnostics);
+    notices.push(...surface.notices);
+  }
+
+  // --- Surface 6: UI, which the engine refuses ----------------------------
+  const ui = partitionUi(manifest.id, manifest.contributes?.ui ?? []);
+  notices.push(...ui.refusals.map((refusal) => refusal.diagnostic));
+
+  if (diagnostics.length > 0) return { ok: false, diagnostics };
+
+  return {
+    ok: true,
+    plugin: {
+      manifest,
+      permissions,
+      root,
+      tools: tools.items,
+      contextProviders: contextProviders.items,
+      commands: commands.items,
+      hooks: hooks.items,
+      agents: agents.items,
+      ui: ui.forSurfaces,
+      notices,
+    },
+  };
+}
+
+/**
+ * One surface's contributions, plus what went wrong loading them.
+ *
+ * `diagnostics` fail the plugin; `notices` do not. Splitting them per surface rather
+ * than appending to one shared array is what lets each loop below be read on its own:
+ * a surface that produces no diagnostics cannot accidentally observe another's.
+ */
+interface SurfaceOutcome<T> {
+  readonly items: readonly T[];
+  readonly diagnostics: readonly PluginDiagnostic[];
+  readonly notices: readonly PluginDiagnostic[];
+}
+
+/** Surface 1: tools, translated to `@adze/mcp` config. MCP is not reimplemented here. */
+function collectTools(
+  manifest: PluginManifest,
+  permissions: PluginPermissions,
+  options: LoaderOptions,
+): SurfaceOutcome<ToolTranslation> {
+  const items: ToolTranslation[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+  const notices: PluginDiagnostic[] = [];
+
   for (const contribution of manifest.contributes?.tools ?? []) {
     const translated = translateToolContribution(
       manifest.id,
@@ -234,12 +289,24 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       diagnostics.push(...translated.diagnostics);
       continue;
     }
-    tools.push(translated.translation);
+    items.push(translated.translation);
     notices.push(...translated.translation.warnings);
   }
 
-  // --- Surface 4: hooks (and surface 2's wasm providers) -------------------
-  const hooks: HookInstance[] = [];
+  return { items, diagnostics, notices };
+}
+
+/** Surface 4: hooks. The only surface that may deny a tool call. */
+async function collectHooks(
+  manifest: PluginManifest,
+  root: string,
+  limits: GuestLimits,
+  options: LoaderOptions,
+  files: PluginFileSystem,
+): Promise<SurfaceOutcome<HookInstance>> {
+  const items: HookInstance[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+
   for (const [index, contribution] of (manifest.contributes?.hooks ?? []).entries()) {
     const field = `contributes.hooks[${index}]`;
     const runtimeChoice = resolveRuntime(contribution.module, contribution.runtime);
@@ -254,12 +321,13 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       continue;
     }
 
+    const timeoutMs = hookTimeoutMs(contribution);
     const loaded = await loadGuest(
       manifest.id,
       root,
       contribution.module,
       runtimeChoice.runtime,
-      { ...limits, timeoutMs: hookTimeoutMs(contribution) },
+      { ...limits, timeoutMs },
       options,
       files,
       field,
@@ -269,22 +337,34 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       continue;
     }
 
-    hooks.push({
+    items.push({
       pluginId: manifest.id,
       event: contribution.event,
       module: contribution.module,
       runtime: runtimeChoice.runtime,
-      timeoutMs: hookTimeoutMs(contribution),
+      timeoutMs,
       exportName: contribution.export ?? contribution.event,
       guest: loaded.guest,
     });
   }
 
-  // --- Surface 2: context providers ---------------------------------------
-  const contextProviders: PendingContextProvider[] = [];
+  return { items, diagnostics, notices: [] };
+}
+
+/** Surface 2: context providers. `glob` needs no guest; anything else does. */
+async function collectContextProviders(
+  manifest: PluginManifest,
+  root: string,
+  limits: GuestLimits,
+  options: LoaderOptions,
+  files: PluginFileSystem,
+): Promise<SurfaceOutcome<PendingContextProvider>> {
+  const items: PendingContextProvider[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+
   for (const [index, contribution] of (manifest.contributes?.contextProviders ?? []).entries()) {
     if (contribution.type === 'glob') {
-      contextProviders.push({
+      items.push({
         pluginId: manifest.id,
         contribution,
         guest: undefined,
@@ -305,6 +385,7 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       );
       continue;
     }
+
     const timeoutMs = contribution.timeoutMs ?? limits.timeoutMs;
     const loaded = await loadGuest(
       manifest.id,
@@ -320,16 +401,23 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       diagnostics.push(...loaded.diagnostics);
       continue;
     }
-    contextProviders.push({
-      pluginId: manifest.id,
-      contribution,
-      guest: loaded.guest,
-      timeoutMs,
-    });
+
+    items.push({ pluginId: manifest.id, contribution, guest: loaded.guest, timeoutMs });
   }
 
-  // --- Surface 3: commands -------------------------------------------------
-  const commands: SlashCommand[] = [];
+  return { items, diagnostics, notices: [] };
+}
+
+/** Surface 3: slash commands, each a front-mattered markdown file. */
+async function collectCommands(
+  manifest: PluginManifest,
+  root: string,
+  files: PluginFileSystem,
+): Promise<SurfaceOutcome<SlashCommand>> {
+  const items: SlashCommand[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+  const notices: PluginDiagnostic[] = [];
+
   for (const [index, reference] of (manifest.contributes?.commands ?? []).entries()) {
     const field = `contributes.commands[${index}]`;
     const text = await readReferenced(files, root, reference.path, manifest.id, field);
@@ -342,12 +430,23 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       diagnostics.push(...parsedCommand.diagnostics);
       continue;
     }
-    commands.push(parsedCommand.command);
+    items.push(parsedCommand.command);
     notices.push(...parsedCommand.warnings);
   }
 
-  // --- Surface 5: subagents ------------------------------------------------
-  const agents: SubagentDefinition[] = [];
+  return { items, diagnostics, notices };
+}
+
+/** Surface 5: subagents. Narrowed against the parent's grant at invocation, not here. */
+async function collectAgents(
+  manifest: PluginManifest,
+  root: string,
+  files: PluginFileSystem,
+): Promise<SurfaceOutcome<SubagentDefinition>> {
+  const items: SubagentDefinition[] = [];
+  const diagnostics: PluginDiagnostic[] = [];
+  const notices: PluginDiagnostic[] = [];
+
   for (const [index, reference] of (manifest.contributes?.agents ?? []).entries()) {
     const field = `contributes.agents[${index}]`;
     const text = await readReferenced(files, root, reference.path, manifest.id, field);
@@ -360,31 +459,11 @@ export async function loadPlugin(root: string, options: LoaderOptions): Promise<
       diagnostics.push(...parsedAgent.diagnostics);
       continue;
     }
-    agents.push(parsedAgent.definition);
+    items.push(parsedAgent.definition);
     notices.push(...parsedAgent.warnings);
   }
 
-  // --- Surface 6: UI, which the engine refuses ----------------------------
-  const ui = partitionUi(manifest.id, manifest.contributes?.ui ?? []);
-  notices.push(...ui.refusals.map((refusal) => refusal.diagnostic));
-
-  if (diagnostics.length > 0) return { ok: false, diagnostics };
-
-  return {
-    ok: true,
-    plugin: {
-      manifest,
-      permissions,
-      root,
-      tools,
-      contextProviders,
-      commands,
-      hooks,
-      agents,
-      ui: ui.forSurfaces,
-      notices,
-    },
-  };
+  return { items, diagnostics, notices };
 }
 
 type GuestOutcome =

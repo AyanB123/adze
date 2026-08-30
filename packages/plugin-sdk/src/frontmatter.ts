@@ -120,96 +120,122 @@ function parseBlock(
   while (index < lines.length) {
     const entry = lines[index];
     if (entry === undefined) break;
-    const raw = entry.text;
-    const trimmed = raw.trim();
+    const trimmed = entry.text.trim();
 
     if (trimmed.length === 0 || trimmed.startsWith('#')) {
       index += 1;
       continue;
     }
 
-    const unsupported = unsupportedConstruct(trimmed);
-    if (unsupported !== undefined) {
-      return { ok: false, message: `${label}:${entry.number}: ${unsupported}` };
-    }
+    const key = readKey(entry, trimmed, label, data);
+    if (!key.ok) return { ok: false, message: key.message };
 
-    if (raw.startsWith(' ') || raw.startsWith('\t')) {
-      return {
-        ok: false,
-        message:
-          `${label}:${entry.number}: unexpected indentation. Only top-level keys and ` +
-          `block-sequence '- ' items under a key are supported.`,
-      };
-    }
-
-    const colon = trimmed.indexOf(':');
-    if (colon <= 0) {
-      return {
-        ok: false,
-        message: `${label}:${entry.number}: expected 'key: value'. Found '${trimmed}'.`,
-      };
-    }
-
-    const key = trimmed.slice(0, colon).trim();
-    if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(key)) {
-      return {
-        ok: false,
-        message: `${label}:${entry.number}: '${key}' is not a usable key name.`,
-      };
-    }
-    if (key in data) {
-      return {
-        ok: false,
-        message:
-          `${label}:${entry.number}: '${key}' is defined twice. Which one wins is exactly ` +
-          `the kind of thing a reviewer would not notice, so it is an error.`,
-      };
-    }
-
-    const inline = trimmed.slice(colon + 1).trim();
+    const inline = trimmed.slice(key.colon + 1).trim();
     if (inline.length > 0) {
       const value = parseInlineValue(inline);
       if (!value.ok) return { ok: false, message: `${label}:${entry.number}: ${value.message}` };
-      data[key] = value.value;
+      data[key.name] = value.value;
       index += 1;
       continue;
     }
 
     // A key with nothing after the colon: either a block sequence, or nothing.
-    const items: FrontmatterScalar[] = [];
-    let scan = index + 1;
-    for (; scan < lines.length; scan += 1) {
-      const candidate = lines[scan];
-      if (candidate === undefined) break;
-      const candidateTrimmed = candidate.text.trim();
-      if (candidateTrimmed.length === 0 || candidateTrimmed.startsWith('#')) continue;
-      if (!candidateTrimmed.startsWith('- ') && candidateTrimmed !== '-') break;
-      if (candidateTrimmed === '-') {
-        return {
-          ok: false,
-          message: `${label}:${candidate.number}: a sequence item must have a value.`,
-        };
-      }
-      const item = parseScalar(candidateTrimmed.slice(2).trim());
-      if (!item.ok) {
-        return { ok: false, message: `${label}:${candidate.number}: ${item.message}` };
-      }
-      items.push(item.value);
-    }
-
-    if (items.length === 0) {
+    const sequence = readBlockSequence(lines, index + 1, label);
+    if (!sequence.ok) return { ok: false, message: sequence.message };
+    if (sequence.items.length === 0) {
       return {
         ok: false,
         message:
-          `${label}:${entry.number}: '${key}' has no value. Nested mappings are not ` +
-          `supported; use an inline mapping such as '${key}: { prefer: reasoning }'.`,
+          `${label}:${entry.number}: '${key.name}' has no value. Nested mappings are not ` +
+          `supported; use an inline mapping such as '${key.name}: { prefer: reasoning }'.`,
       };
     }
-    data[key] = items;
-    index = scan;
+    data[key.name] = sequence.items;
+    index = sequence.next;
   }
 
   return { ok: true, data };
+}
+
+type KeyOutcome =
+  | { readonly ok: true; readonly name: string; readonly colon: number }
+  | { readonly ok: false; readonly message: string };
+
+/** Validate one `key:` prefix, including the checks that must precede a value. */
+function readKey(
+  entry: { readonly text: string; readonly number: number },
+  trimmed: string,
+  label: string,
+  seen: Readonly<Record<string, FrontmatterValue>>,
+): KeyOutcome {
+  const unsupported = unsupportedConstruct(trimmed);
+  if (unsupported !== undefined) {
+    return { ok: false, message: `${label}:${entry.number}: ${unsupported}` };
+  }
+
+  if (entry.text.startsWith(' ') || entry.text.startsWith('\t')) {
+    return {
+      ok: false,
+      message:
+        `${label}:${entry.number}: unexpected indentation. Only top-level keys and ` +
+        `block-sequence '- ' items under a key are supported.`,
+    };
+  }
+
+  const colon = trimmed.indexOf(':');
+  if (colon <= 0) {
+    return {
+      ok: false,
+      message: `${label}:${entry.number}: expected 'key: value'. Found '${trimmed}'.`,
+    };
+  }
+
+  const name = trimmed.slice(0, colon).trim();
+  if (!/^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)) {
+    return { ok: false, message: `${label}:${entry.number}: '${name}' is not a usable key name.` };
+  }
+  if (name in seen) {
+    return {
+      ok: false,
+      message:
+        `${label}:${entry.number}: '${name}' is defined twice. Which one wins is exactly ` +
+        `the kind of thing a reviewer would not notice, so it is an error.`,
+    };
+  }
+  return { ok: true, name, colon };
+}
+
+type SequenceOutcome =
+  | { readonly ok: true; readonly items: readonly FrontmatterScalar[]; readonly next: number }
+  | { readonly ok: false; readonly message: string };
+
+/** Collect `- item` lines starting at `from`. Stops at the first line that is not one. */
+function readBlockSequence(
+  lines: readonly { readonly text: string; readonly number: number }[],
+  from: number,
+  label: string,
+): SequenceOutcome {
+  const items: FrontmatterScalar[] = [];
+  let scan = from;
+
+  for (; scan < lines.length; scan += 1) {
+    const candidate = lines[scan];
+    if (candidate === undefined) break;
+    const trimmed = candidate.text.trim();
+    if (trimmed.length === 0 || trimmed.startsWith('#')) continue;
+    if (!trimmed.startsWith('- ') && trimmed !== '-') break;
+    if (trimmed === '-') {
+      return {
+        ok: false,
+        message: `${label}:${candidate.number}: a sequence item must have a value.`,
+      };
+    }
+    const item = parseScalar(trimmed.slice(2).trim());
+    if (!item.ok) return { ok: false, message: `${label}:${candidate.number}: ${item.message}` };
+    items.push(item.value);
+  }
+
+  return { ok: true, items, next: scan };
 }
 
 function unsupportedConstruct(trimmed: string): string | undefined {
@@ -244,42 +270,43 @@ type ScalarOutcome =
   | { readonly ok: false; readonly message: string };
 
 function parseInlineValue(raw: string): ValueOutcome {
-  if (raw.startsWith('[')) {
-    if (!raw.endsWith(']')) {
-      return { ok: false, message: 'an inline sequence must close with "]" on the same line.' };
-    }
-    const inner = raw.slice(1, -1).trim();
-    if (inner.length === 0) return { ok: true, value: [] };
-    const items: FrontmatterScalar[] = [];
-    for (const part of splitTopLevel(inner)) {
-      const scalar = parseScalar(part.trim());
-      if (!scalar.ok) return scalar;
-      items.push(scalar.value);
-    }
-    return { ok: true, value: items };
-  }
-
-  if (raw.startsWith('{')) {
-    if (!raw.endsWith('}')) {
-      return { ok: false, message: 'an inline mapping must close with "}" on the same line.' };
-    }
-    const inner = raw.slice(1, -1).trim();
-    const record: Record<string, FrontmatterScalar> = {};
-    if (inner.length === 0) return { ok: true, value: record };
-    for (const part of splitTopLevel(inner)) {
-      const colon = part.indexOf(':');
-      if (colon <= 0) {
-        return { ok: false, message: `'${part.trim()}' is not 'key: value' inside a mapping.` };
-      }
-      const key = part.slice(0, colon).trim();
-      const scalar = parseScalar(part.slice(colon + 1).trim());
-      if (!scalar.ok) return scalar;
-      record[key] = scalar.value;
-    }
-    return { ok: true, value: record };
-  }
-
+  if (raw.startsWith('[')) return parseInlineSequence(raw);
+  if (raw.startsWith('{')) return parseInlineMapping(raw);
   return parseScalar(raw);
+}
+
+function parseInlineSequence(raw: string): ValueOutcome {
+  if (!raw.endsWith(']')) {
+    return { ok: false, message: 'an inline sequence must close with "]" on the same line.' };
+  }
+  const inner = raw.slice(1, -1).trim();
+  if (inner.length === 0) return { ok: true, value: [] };
+  const items: FrontmatterScalar[] = [];
+  for (const part of splitTopLevel(inner)) {
+    const scalar = parseScalar(part.trim());
+    if (!scalar.ok) return scalar;
+    items.push(scalar.value);
+  }
+  return { ok: true, value: items };
+}
+
+function parseInlineMapping(raw: string): ValueOutcome {
+  if (!raw.endsWith('}')) {
+    return { ok: false, message: 'an inline mapping must close with "}" on the same line.' };
+  }
+  const inner = raw.slice(1, -1).trim();
+  const record: Record<string, FrontmatterScalar> = {};
+  if (inner.length === 0) return { ok: true, value: record };
+  for (const part of splitTopLevel(inner)) {
+    const colon = part.indexOf(':');
+    if (colon <= 0) {
+      return { ok: false, message: `'${part.trim()}' is not 'key: value' inside a mapping.` };
+    }
+    const scalar = parseScalar(part.slice(colon + 1).trim());
+    if (!scalar.ok) return scalar;
+    record[part.slice(0, colon).trim()] = scalar.value;
+  }
+  return { ok: true, value: record };
 }
 
 /** Split on commas that are not inside quotes or brackets. */

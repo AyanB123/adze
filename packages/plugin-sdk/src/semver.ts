@@ -87,28 +87,38 @@ export function compareVersions(a: SemanticVersion, b: SemanticVersion): number 
   if (a.major !== b.major) return a.major < b.major ? -1 : 1;
   if (a.minor !== b.minor) return a.minor < b.minor ? -1 : 1;
   if (a.patch !== b.patch) return a.patch < b.patch ? -1 : 1;
+  return comparePrerelease(a.prerelease, b.prerelease);
+}
 
+function comparePrerelease(
+  a: readonly (string | number)[],
+  b: readonly (string | number)[],
+): number {
   // A release outranks any prerelease of the same triple.
-  if (a.prerelease.length === 0 && b.prerelease.length === 0) return 0;
-  if (a.prerelease.length === 0) return 1;
-  if (b.prerelease.length === 0) return -1;
+  if (a.length === 0 && b.length === 0) return 0;
+  if (a.length === 0) return 1;
+  if (b.length === 0) return -1;
 
-  const shared = Math.min(a.prerelease.length, b.prerelease.length);
+  const shared = Math.min(a.length, b.length);
   for (let index = 0; index < shared; index += 1) {
-    const left = a.prerelease[index];
-    const right = b.prerelease[index];
+    const left = a[index];
+    const right = b[index];
     if (left === undefined || right === undefined) break;
     if (left === right) continue;
-    const leftNumeric = typeof left === 'number';
-    const rightNumeric = typeof right === 'number';
-    if (leftNumeric && rightNumeric) return left < right ? -1 : 1;
-    // Numeric identifiers always have lower precedence than alphanumeric ones.
-    if (leftNumeric) return -1;
-    if (rightNumeric) return 1;
-    return String(left) < String(right) ? -1 : 1;
+    return compareIdentifiers(left, right);
   }
-  if (a.prerelease.length === b.prerelease.length) return 0;
-  return a.prerelease.length < b.prerelease.length ? -1 : 1;
+  if (a.length === b.length) return 0;
+  return a.length < b.length ? -1 : 1;
+}
+
+function compareIdentifiers(left: string | number, right: string | number): number {
+  const leftNumeric = typeof left === 'number';
+  const rightNumeric = typeof right === 'number';
+  if (leftNumeric && rightNumeric) return left < right ? -1 : 1;
+  // Numeric identifiers always have lower precedence than alphanumeric ones.
+  if (leftNumeric) return -1;
+  if (rightNumeric) return 1;
+  return String(left) < String(right) ? -1 : 1;
 }
 
 type Operator = '<' | '<=' | '>' | '>=' | '=';
@@ -230,53 +240,59 @@ function evaluate(version: SemanticVersion, trimmed: string): RangeCheckOutcome 
   let anySatisfied = false;
 
   for (const alternative of trimmed.split('||')) {
-    const tokens = alternative
-      .trim()
-      .split(/\s+/)
-      .filter((token) => token.length > 0);
-    if (tokens.length === 0) {
-      return {
-        ok: false,
-        message: `'${trimmed}' has an empty alternative around '||'.`,
-      };
-    }
+    const resolved = resolveAlternative(alternative, trimmed);
+    if (!resolved.ok) return { ok: false, message: resolved.message };
 
-    const comparators: Comparator[] = [];
-    for (const token of tokens) {
-      if (token === '*') {
-        // `*` is only meaningful alone. `>=1.0.0 *` is a typo, not a wildcard.
-        if (tokens.length !== 1) {
-          return { ok: false, message: `'*' cannot be combined with other comparators.` };
-        }
-        comparators.length = 0;
-        break;
-      }
-      const desugared = desugar(token);
-      if (!desugared.ok) return { ok: false, message: desugared.message };
-      comparators.push(...desugared.comparators);
-    }
-
-    if (comparators.length === 0) {
+    if (resolved.comparators.length === 0) {
       // `*`: any release. A prerelease still needs to be asked for explicitly.
       if (version.prerelease.length === 0) return { ok: true, satisfied: true };
       continue;
     }
 
-    const allHold = comparators.every((comparator) => satisfiesComparator(version, comparator));
-    if (!allHold) continue;
-
-    if (version.prerelease.length > 0) {
-      // Semver's prerelease rule: opting into a prerelease has to be explicit.
-      const opted = comparators.some(
-        (comparator) =>
-          comparator.version.prerelease.length > 0 &&
-          samePrereleaseTuple(version, comparator.version),
-      );
-      if (!opted) continue;
-    }
-
-    anySatisfied = true;
+    if (alternativeHolds(version, resolved.comparators)) anySatisfied = true;
   }
 
   return { ok: true, satisfied: anySatisfied };
+}
+
+/**
+ * The comparators for one `||` branch.
+ *
+ * An empty `comparators` array is how `*` is represented, rather than a separate
+ * flag: every comparator holding vacuously is exactly what `*` means, so the caller
+ * needs no special case beyond the prerelease rule.
+ */
+function resolveAlternative(alternative: string, whole: string): ComparatorOutcome {
+  const tokens = alternative
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0);
+  if (tokens.length === 0) {
+    return { ok: false, message: `'${whole}' has an empty alternative around '||'.` };
+  }
+
+  const comparators: Comparator[] = [];
+  for (const token of tokens) {
+    if (token === '*') {
+      // `*` is only meaningful alone. `>=1.0.0 *` is a typo, not a wildcard.
+      if (tokens.length !== 1) {
+        return { ok: false, message: `'*' cannot be combined with other comparators.` };
+      }
+      return { ok: true, comparators: [] };
+    }
+    const desugared = desugar(token);
+    if (!desugared.ok) return { ok: false, message: desugared.message };
+    comparators.push(...desugared.comparators);
+  }
+  return { ok: true, comparators };
+}
+
+function alternativeHolds(version: SemanticVersion, comparators: readonly Comparator[]): boolean {
+  if (!comparators.every((comparator) => satisfiesComparator(version, comparator))) return false;
+  if (version.prerelease.length === 0) return true;
+  // Semver's prerelease rule: opting into a prerelease has to be explicit.
+  return comparators.some(
+    (comparator) =>
+      comparator.version.prerelease.length > 0 && samePrereleaseTuple(version, comparator.version),
+  );
 }

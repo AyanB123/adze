@@ -219,121 +219,181 @@ export async function interpolate(
 ): Promise<InterpolationOutcome> {
   const maxBytes = deps.maxCommandBytes ?? DEFAULT_MAX_COMMAND_BYTES;
   const template = command.template;
-  const diagnostics: PluginDiagnostic[] = [];
-  const warnings: PluginDiagnostic[] = [];
-  const commandsRun: string[] = [];
-  const triggersResolved: string[] = [];
+  const acc: Accumulator = {
+    output: '',
+    commandsRun: [],
+    triggersResolved: [],
+    diagnostics: [],
+    warnings: [],
+  };
 
-  let output = '';
   let index = 0;
-
   while (index < template.length) {
     const character = template[index];
     if (character === undefined) break;
 
     if (character === '!' && template[index + 1] === '`') {
-      const close = template.indexOf('`', index + 2);
-      if (close < 0) {
-        diagnostics.push(
-          errorDiagnostic(
-            'frontmatter-invalid',
-            `${command.source}: a '!\`' command block is never closed with a backtick.`,
-          ),
-        );
-        break;
-      }
-      const shellCommand = template.slice(index + 2, close).trim();
-      index = close + 1;
-
-      if (shellCommand.length === 0) {
-        diagnostics.push(
-          errorDiagnostic('frontmatter-invalid', `${command.source}: an empty '!\`\`' block.`),
-        );
-        continue;
-      }
-
-      const runner = deps.runCommand;
-      if (runner === undefined) {
-        // Refuse, rather than expand to nothing. See the header.
-        diagnostics.push(
-          errorDiagnostic(
-            'frontmatter-invalid',
-            `${command.source}: '/${command.name}' inlines the output of \`${shellCommand}\`, ` +
-              `and this host provided no gate-checked command runner. The command is refused ` +
-              `rather than expanded without it: a prompt that asks the model to review output ` +
-              `that is not there gets an answer about nothing.`,
-          ),
-        );
-        continue;
-      }
-
-      let result: { readonly ok: boolean; readonly text: string };
-      try {
-        result = await runner(shellCommand);
-      } catch (error) {
-        diagnostics.push(
-          errorDiagnostic(
-            'frontmatter-invalid',
-            `${command.source}: \`${shellCommand}\` could not be run: ` +
-              `${error instanceof Error ? error.message : String(error)}`,
-          ),
-        );
-        continue;
-      }
-
-      commandsRun.push(shellCommand);
-      const clipped = result.text.length > maxBytes ? result.text.slice(0, maxBytes) : result.text;
-      if (clipped.length < result.text.length) {
-        warnings.push(
-          warningDiagnostic(
-            'frontmatter-invalid',
-            `${command.source}: output of \`${shellCommand}\` was clipped to ${maxBytes} bytes.`,
-          ),
-        );
-      }
-      // The status is stated rather than implied. A model reading command output
-      // that failed should know it failed; silently inlining stderr as if it were
-      // stdout is how a model concludes a test suite passed.
-      output += result.ok ? clipped : `[command failed: ${shellCommand}]\n${clipped}`;
+      const step = await expandCommandBlock(command, deps, template, index, maxBytes, acc);
+      if (step.stop === true) break;
+      index = step.next;
       continue;
     }
 
     if (character === '@') {
-      const previous = index === 0 ? '' : (template[index - 1] ?? '');
-      // `foo@bar`, `a/@b`: not a reference. `@` is ordinary punctuation.
-      const standalone = previous === '' || /[\s([{,;:>"']/.test(previous);
-      const match = standalone ? /^@[a-z0-9][a-z0-9-]*/.exec(template.slice(index)) : null;
-      if (match === null) {
-        output += character;
-        index += 1;
-        continue;
-      }
-
-      const trigger = match[0];
-      const resolver = deps.resolveTrigger;
-      const resolved = resolver === undefined ? undefined : await resolver(trigger);
-      if (resolved === undefined) {
-        // Left literal. An unknown `@name` is far more likely to be prose than a
-        // typo'd provider, and erroring would make any prompt mentioning a handle
-        // unusable.
-        output += trigger;
-        index += trigger.length;
-        continue;
-      }
-
-      triggersResolved.push(trigger);
-      output += resolved.text;
-      index += trigger.length;
+      const step = await expandTrigger(deps, template, index, acc);
+      index = step.next;
       continue;
     }
 
-    output += character;
+    acc.output += character;
     index += 1;
   }
 
-  if (diagnostics.length > 0) return { ok: false, diagnostics };
+  if (acc.diagnostics.length > 0) return { ok: false, diagnostics: acc.diagnostics };
   return {
     ok: true,
-    interpolation: { prompt: output, commandsRun, triggersResolved, warnings },
+    interpolation: {
+      prompt: acc.output,
+      commandsRun: acc.commandsRun,
+      triggersResolved: acc.triggersResolved,
+      warnings: acc.warnings,
+    },
   };
+}
+
+/**
+ * What one pass accumulates.
+ *
+ * A mutable bag threaded through the two expanders rather than each returning its own
+ * partial result, because `output` has to stay a single left-to-right string: the
+ * ordering guarantee in this file's header is the reason `!` and `@` cannot be
+ * expanded independently and merged afterwards.
+ */
+interface Accumulator {
+  output: string;
+  readonly commandsRun: string[];
+  readonly triggersResolved: string[];
+  readonly diagnostics: PluginDiagnostic[];
+  readonly warnings: PluginDiagnostic[];
+}
+
+/** Where the scan continues, and whether it must stop entirely. */
+interface Step {
+  readonly next: number;
+  readonly stop?: boolean;
+}
+
+async function expandCommandBlock(
+  command: SlashCommand,
+  deps: InterpolationDeps,
+  template: string,
+  index: number,
+  maxBytes: number,
+  acc: Accumulator,
+): Promise<Step> {
+  const close = template.indexOf('`', index + 2);
+  if (close < 0) {
+    acc.diagnostics.push(
+      errorDiagnostic(
+        'frontmatter-invalid',
+        `${command.source}: a '!\`' command block is never closed with a backtick.`,
+      ),
+    );
+    return { next: index, stop: true };
+  }
+
+  const shellCommand = template.slice(index + 2, close).trim();
+  const next = close + 1;
+
+  if (shellCommand.length === 0) {
+    acc.diagnostics.push(
+      errorDiagnostic('frontmatter-invalid', `${command.source}: an empty '!\`\`' block.`),
+    );
+    return { next };
+  }
+
+  const runner = deps.runCommand;
+  if (runner === undefined) {
+    // Refuse, rather than expand to nothing. See the header.
+    acc.diagnostics.push(
+      errorDiagnostic(
+        'frontmatter-invalid',
+        `${command.source}: '/${command.name}' inlines the output of \`${shellCommand}\`, ` +
+          `and this host provided no gate-checked command runner. The command is refused ` +
+          `rather than expanded without it: a prompt that asks the model to review output ` +
+          `that is not there gets an answer about nothing.`,
+      ),
+    );
+    return { next };
+  }
+
+  let result: { readonly ok: boolean; readonly text: string };
+  try {
+    result = await runner(shellCommand);
+  } catch (error) {
+    acc.diagnostics.push(
+      errorDiagnostic(
+        'frontmatter-invalid',
+        `${command.source}: \`${shellCommand}\` could not be run: ` +
+          `${error instanceof Error ? error.message : String(error)}`,
+      ),
+    );
+    return { next };
+  }
+
+  acc.commandsRun.push(shellCommand);
+  acc.output += renderCommandOutput(command, shellCommand, result, maxBytes, acc);
+  return { next };
+}
+
+function renderCommandOutput(
+  command: SlashCommand,
+  shellCommand: string,
+  result: { readonly ok: boolean; readonly text: string },
+  maxBytes: number,
+  acc: Accumulator,
+): string {
+  const clipped = result.text.length > maxBytes ? result.text.slice(0, maxBytes) : result.text;
+  if (clipped.length < result.text.length) {
+    acc.warnings.push(
+      warningDiagnostic(
+        'frontmatter-invalid',
+        `${command.source}: output of \`${shellCommand}\` was clipped to ${maxBytes} bytes.`,
+      ),
+    );
+  }
+  // The status is stated rather than implied. A model reading command output that
+  // failed should know it failed; silently inlining stderr as if it were stdout is how
+  // a model concludes a test suite passed.
+  return result.ok ? clipped : `[command failed: ${shellCommand}]\n${clipped}`;
+}
+
+async function expandTrigger(
+  deps: InterpolationDeps,
+  template: string,
+  index: number,
+  acc: Accumulator,
+): Promise<Step> {
+  const previous = index === 0 ? '' : (template[index - 1] ?? '');
+  // `foo@bar`, `a/@b`: not a reference. `@` is ordinary punctuation.
+  const standalone = previous === '' || /[\s([{,;:>"']/.test(previous);
+  const match = standalone ? /^@[a-z0-9][a-z0-9-]*/.exec(template.slice(index)) : null;
+  if (match === null) {
+    acc.output += '@';
+    return { next: index + 1 };
+  }
+
+  const trigger = match[0];
+  const resolver = deps.resolveTrigger;
+  const resolved = resolver === undefined ? undefined : await resolver(trigger);
+  if (resolved === undefined) {
+    // Left literal. An unknown `@name` is far more likely to be prose than a typo'd
+    // provider, and erroring would make any prompt mentioning a handle unusable.
+    acc.output += trigger;
+    return { next: index + trigger.length };
+  }
+
+  acc.triggersResolved.push(trigger);
+  acc.output += resolved.text;
+  return { next: index + trigger.length };
 }

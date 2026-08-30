@@ -110,7 +110,6 @@ export function buildGlobProvider(
       kind: 'glob',
       maxBytes,
       async resolve(): Promise<ContextResolution> {
-        const diagnostics: PluginDiagnostic[] = [];
         let listed: readonly string[];
         try {
           listed = await deps.files.list(deps.workspaceRoot);
@@ -132,41 +131,61 @@ export function buildGlobProvider(
         // unstable order is a provider-cache miss on every turn, which is the same
         // failure core's epochs exist to prevent.
         const selected = listed.map(toPosix).filter(matches).sort();
-        const chunks: ContextChunk[] = [];
-        let used = 0;
-        let truncated = false;
-
-        for (const path of selected) {
-          if (used >= maxBytes) {
-            truncated = true;
-            break;
-          }
-          let content: string;
-          try {
-            content = await deps.files.read(path);
-          } catch (error) {
-            diagnostics.push(
-              errorDiagnostic(
-                'file-missing',
-                `plugin '${pluginId}' provider '${contribution.name}' matched '${path}' but ` +
-                  `could not read it: ${error instanceof Error ? error.message : String(error)}`,
-              ),
-            );
-            continue;
-          }
-          const remaining = maxBytes - used;
-          const clipped = content.length > remaining ? content.slice(0, remaining) : content;
-          if (clipped.length < content.length) truncated = true;
-          used += clipped.length;
-          // A declarative provider has no basis for ranking, so it does not pretend
-          // to: every chunk carries the same relevance and the assembler decides.
-          chunks.push({ source: path, content: clipped, relevance: 0.5 });
-        }
-
-        return { chunks, diagnostics, truncated };
+        return await readWithinBudget(selected, maxBytes, deps, pluginId, contribution.name);
       },
     },
   };
+}
+
+/**
+ * Read matched files until the byte budget runs out.
+ *
+ * The budget is enforced per chunk rather than by reading everything and cutting at
+ * the end: a provider pointed at a large tree would otherwise load the whole thing
+ * into memory to discard most of it.
+ */
+async function readWithinBudget(
+  selected: readonly string[],
+  maxBytes: number,
+  deps: GlobProviderDeps,
+  pluginId: string,
+  providerName: string,
+): Promise<ContextResolution> {
+  const diagnostics: PluginDiagnostic[] = [];
+  const chunks: ContextChunk[] = [];
+  let used = 0;
+  let truncated = false;
+
+  for (const path of selected) {
+    if (used >= maxBytes) {
+      truncated = true;
+      break;
+    }
+
+    let content: string;
+    try {
+      content = await deps.files.read(path);
+    } catch (error) {
+      diagnostics.push(
+        errorDiagnostic(
+          'file-missing',
+          `plugin '${pluginId}' provider '${providerName}' matched '${path}' but ` +
+            `could not read it: ${error instanceof Error ? error.message : String(error)}`,
+        ),
+      );
+      continue;
+    }
+
+    const remaining = maxBytes - used;
+    const clipped = content.length > remaining ? content.slice(0, remaining) : content;
+    if (clipped.length < content.length) truncated = true;
+    used += clipped.length;
+    // A declarative provider has no basis for ranking, so it does not pretend to:
+    // every chunk carries the same relevance and the assembler decides.
+    chunks.push({ source: path, content: clipped, relevance: 0.5 });
+  }
+
+  return { chunks, diagnostics, truncated };
 }
 
 export interface WasmProviderDeps {
