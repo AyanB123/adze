@@ -98,6 +98,12 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
 
   renderBanner(agent, invocation, io, style);
 
+  // Measured, not zero. `durationMs: 0` was hardcoded here, so every session reported
+  // "wall clock 0.0s" no matter how long it ran — a reported metric that was never a
+  // measurement. `run` already threads the clock this way, and the summary renderer is
+  // shared, so the two commands now describe the same quantity.
+  const startedAt = (hooks?.now ?? Date.now)();
+
   const outcome = await repl({ agent, invocation, reader, approvals, io, style });
 
   if (outcome.turns > 0) {
@@ -108,7 +114,7 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
         steps: outcome.turns,
         usage: outcome.usage,
         prices: agent.gateway.priceFor(agent.model),
-        durationMs: 0,
+        durationMs: (hooks?.now ?? Date.now)() - startedAt,
         approvals: approvals.count(),
         droppedEvents: renderer.droppedEvents,
       },
