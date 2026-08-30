@@ -1,0 +1,17 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.docs-sync",
+  "version": "0.1.0",
+  "displayName": "Docs Sync",
+  "description": "Finds public API changes and status claims that documentation has not caught up with, in both directions.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "commands": [{ "path": "commands/docs-sync.md" }],
+    "agents": [{ "path": "agents/docs-auditor.md" }]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}

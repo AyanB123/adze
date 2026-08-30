@@ -1,0 +1,53 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.adr-context",
+  "version": "0.1.0",
+  "displayName": "Decision Record Context",
+  "description": "Exposes this repository's architecture decision records, invariants, benchmark policy, and governance documents behind @-triggers, and drafts a new ADR.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "contextProviders": [
+      {
+        "type": "glob",
+        "name": "adr",
+        "patterns": ["docs/architecture/adr/**/*.md"],
+        "trigger": "@adr",
+        "maxBytes": 131072
+      },
+      {
+        "type": "glob",
+        "name": "invariants",
+        "patterns": ["docs/architecture/*.md", "CONTRIBUTING.md"],
+        "trigger": "@invariants",
+        "maxBytes": 65536
+      },
+      {
+        "type": "glob",
+        "name": "bench-policy",
+        "patterns": ["docs/benchmarks/**/*.md", "docs/architecture/adr/0011-benchmark-harness.md"],
+        "trigger": "@bench-policy",
+        "maxBytes": 65536
+      },
+      {
+        "type": "glob",
+        "name": "governance",
+        "patterns": ["GOVERNANCE.md", "SECURITY.md", "CODE_OF_CONDUCT.md"],
+        "trigger": "@governance",
+        "maxBytes": 65536
+      },
+      {
+        "type": "glob",
+        "name": "plugin-spec",
+        "patterns": ["docs/plugins/**/*.md", "docs/architecture/adr/0008-*.md"],
+        "trigger": "@plugin-spec",
+        "maxBytes": 65536
+      }
+    ],
+    "commands": [{ "path": "commands/adr-new.md" }]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}

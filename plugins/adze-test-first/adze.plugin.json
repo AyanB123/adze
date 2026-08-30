@@ -1,0 +1,20 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.test-first",
+  "version": "0.1.0",
+  "displayName": "Test First",
+  "description": "Makes write-a-failing-test-then-fix a first-class workflow, and turns a model failure into a permanent regression case.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "commands": [
+      { "path": "commands/test-first.md" },
+      { "path": "commands/regression-case.md" },
+      { "path": "commands/verify.md" }
+    ]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}

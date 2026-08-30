@@ -1,0 +1,29 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.review",
+  "version": "0.1.0",
+  "displayName": "Review",
+  "description": "Read-only subagents that audit a diff and report findings by severity, and a command that runs the audit against staged changes.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "agents": [
+      { "path": "agents/code-review.md" },
+      { "path": "agents/apply-forensics.md" },
+      { "path": "agents/bench-claims.md" }
+    ],
+    "commands": [{ "path": "commands/review-diff.md" }],
+    "ui": [
+      {
+        "surface": "vscode",
+        "id": "adze.review.findings",
+        "kind": "tree-view",
+        "title": "Review findings"
+      }
+    ]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}

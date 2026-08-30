@@ -54,18 +54,28 @@ edit-tool-only and whole-file writes must be policed on `tool.pre`.
 policy hooks — is invoked on every `read`, `grep`, `write`, and `edit` in the session and
 must open with `if (input.name !== 'bash') return { kind: 'allow' };`.
 
-Every first-party hook here begins with a guard like that. It is harmless individually
-and it is the hot path: the hook is `await`ed inside `dispatchToolCall`, so with ten
-policy plugins installed a session pays ten guest round-trips per tool call to have nine
-of them immediately return `allow`.
+Every first-party hook plugin here begins with a guard like that. It is harmless
+individually and it is the hot path: the hook is `await`ed inside `dispatchToolCall`, so
+with ten policy plugins installed a session pays ten guest round-trips per tool call to
+have nine of them immediately return `allow`.
 
-The manifest already has the natural place to fix this. `contributes.hooks[]` entries
-could carry a `tools: ["bash"]` or `paths: ["**/*.yml"]` filter that the host applies
-before dispatching to the guest — declarative, checkable at load, and it would let the
-host skip the guest call entirely. There is no such field.
+There is a second cost specific to `edit.pre`. In `packages/plugin-sdk/src/bridge.ts`,
+`toolPre` fires **both** `tool.pre` and — for an edit-shaped tool — `edit.pre`. A plugin
+registering both events, which three of the four here do because `edit.pre` cannot see
+whole-file content (finding 1), is therefore invoked **twice** for every `edit` and every
+`write` call: the guest is entered, the payload serialized, and the handler dispatches on
+the event name, twice. That is correct behaviour and it is documented nowhere. A plugin
+author who assumed the two events were alternatives rather than both firing would write a
+handler that double-counts.
 
-**Cost accepted here:** a redundant guard clause in six plugins, and a latency profile
-that gets worse linearly with the number of installed policy plugins.
+The manifest already has the natural place to fix the filtering half.
+`contributes.hooks[]` entries could carry a `tools: ["bash"]` or `paths: ["**/*.yml"]`
+filter that the host applies before dispatching to the guest — declarative, checkable at
+load, and it would let the host skip the guest call entirely. There is no such field.
+
+**Cost accepted here:** a redundant guard clause in four plugins, a double invocation on
+every edit for three of them, and a latency profile that gets worse linearly with the
+number of installed policy plugins.
 
 ---
 
@@ -197,6 +207,14 @@ that proves only that JSON validates.
 
 ## 8. Smaller things
 
+- **A subagent omitting `tools` is refused; a subagent omitting `permissions` inherits the
+  parent's.** Both defaults are defensible alone — an empty `tools` list would mean inheriting
+  the parent's whole tool set, which is the one thing a subagent must not do, while a missing
+  permission request can only narrow to the parent and never widen. But the asymmetry is
+  undocumented, and it means "I did not say" has opposite consequences on two adjacent
+  front-matter keys. Every subagent in `adze.review` therefore states
+  `permissions: { filesystem: read }` explicitly, and `plugins/test/review.test.ts` pins the
+  inheritance behaviour for `network` and `env` so a change to it is visible.
 - **`permissions` has no way to say "reads the text it is given and nothing else".** Every
   hook plugin here declares `filesystem: "none"`, which is accurate, and there is no way
   to express the more useful statement: this hook is a pure function of its payload. The
@@ -207,6 +225,10 @@ that proves only that JSON validates.
   an engine at `0.0.1`, so copying the spec's manifest verbatim produces
   `engine-mismatch` and a plugin that will not load. The example should match the engine
   the reader has.
+- **The spec does not say whether `acme.team.guard` is a legal id.** `packages/plugin-sdk`
+  requires exactly one dot so it can extract the namespace unambiguously — which matters,
+  because namespace claims are the defence against squatting. The rule is right and it exists
+  only in the implementation.
 - **A slash command's `!` blocks fail the whole command when no runner is supplied.** This
   is the right call and it is undocumented: `docs/plugins/spec.md` says `!` is
   "gate-checked like any tool call" and does not say the command is refused outright
@@ -218,3 +240,24 @@ that proves only that JSON validates.
   and deliberate restriction — `packages/plugin-sdk/src/frontmatter.ts` explains why a
   full YAML parser is a security problem on this path — but the spec presents inline
   mapping as a style choice rather than the only accepted form.
+
+---
+
+## 9. One observation about `scripts/check-licenses.mjs`, offered rather than reported
+
+Not a plugin-SDK finding and not a bug — but it was found while building `adze.license-gate`,
+and it is the kind of thing that stops being true after an innocent tidy-up.
+
+`parseExpression` **detects** an SPDX operator with `/\bAND\b/i` and `/\bOR\b/i`, then **splits**
+with `/\s+AND\s+/i` and `/\s+OR\s+/i`. Those do not agree. `AGPL-3.0-or-later` matches the
+detector, since `\b` treats the hyphens as word boundaries, so the expression is classified as an
+`OR`; the splitter then finds no whitespace-delimited operator and returns the whole string as a
+single leaf. That leaf classifies as `denied`, and an `OR` whose every operand is denied is
+denied. The answer is correct.
+
+It is correct for a reason that is not the reason it looks like. Making the two regexes agree on
+`\b` — the obvious cleanup — would split the expression into `AGPL-3.0-` and `-later`, and an
+`OR` satisfied by one acceptable operand would then classify the strongest copyleft licence in
+the list as permitted. `adze.license-gate` hit exactly that, caught by a test asserting
+`AGPL-3.0-or-later` is denied, and now uses whitespace-delimited operators for both detection and
+splitting. Worth a comment in the script, or the same change.
