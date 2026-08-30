@@ -23,6 +23,7 @@
  */
 
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import type { SandboxEnforcement, SandboxMode } from '@adze/protocol';
 
 /** Containment the broker is being asked to apply. */
@@ -140,10 +141,66 @@ export function scrubEnvironment(
 }
 
 /**
+ * The `errno` code carried by a failed `spawn`, when there is one.
+ *
+ * Read through `NodeJS.ErrnoException` rather than `any`: the property is optional on
+ * `Error` at runtime and the cast keeps that visible instead of asserting it away.
+ */
+function errorCode(error: Error): string | undefined {
+  const code = (error as NodeJS.ErrnoException).code;
+  return typeof code === 'string' ? code : undefined;
+}
+
+/**
+ * Attribute a spawn failure to the thing that actually failed.
+ *
+ * Node reports a missing working directory and a missing executable **identically**:
+ * both arrive as `ENOENT` with `error.path` set to the *program*, never to the
+ * directory. So the obvious message blames the program for a directory that does not
+ * exist — observed against a real model as `could not run 'bash': spawn bash ENOENT`
+ * for a bash that was installed and on `PATH`.
+ *
+ * That misattribution is expensive rather than untidy. These messages are written for a
+ * model to read and retry against, and a model told the shell is missing stops using the
+ * shell; it cannot recover, because the thing it would need to fix is one field away and
+ * not mentioned. So the directory is checked before the blame is assigned.
+ *
+ * The `existsSync` call is on the failure path only — once per failed spawn, never in the
+ * success path — which is why a synchronous check is acceptable here.
+ */
+function describeSpawnFailure(error: Error, file: string, cwd: string): string {
+  if (errorCode(error) === 'ENOENT' && !existsSync(cwd)) {
+    return (
+      `could not run '${file}': the working directory '${cwd}' does not exist. ` +
+      `The program itself was not the problem; pass a directory that exists.`
+    );
+  }
+  return `could not run '${file}': ${error.message}`;
+}
+
+/**
  * One `spawn` per call, no shell, nothing retained.
  *
  * `shell: false` is not a default being accepted, it is the point: the argv the
  * gate authorized is the argv that runs, with no intervening interpretation.
+ *
+ * ### A kill reaches the process, not its descendants
+ *
+ * `kill` terminates the process this broker started. It does **not** terminate that
+ * process's children: `bash -lc "sleep 90"` leaves `sleep` running when the shell is
+ * killed, on every platform, and the same is true of a test runner's workers or a dev
+ * server's reloader.
+ *
+ * The turn no longer *waits* for those descendants — see the `exit` handler in
+ * {@link exec} — so a timeout and a cancellation both return promptly. But the
+ * descendants keep running unsupervised until they finish on their own. Killing a whole
+ * process tree needs a process group on POSIX (`detached` plus a negative-pid signal) and
+ * a `taskkill /T` equivalent on Windows; that is a change to what the broker contract
+ * promises about containment and belongs with the `@adze/sandbox` work in ADR-0007, not
+ * as an untested platform branch here.
+ *
+ * Stated rather than omitted, because "the command was killed" reads as though nothing
+ * survived it, and on this broker that is not what happened.
  */
 export class NodeSubprocessBroker implements SandboxBroker {
   readonly name = 'node-subprocess';
@@ -229,27 +286,71 @@ export class NodeSubprocessBroker implements SandboxBroker {
         resolve(outcome);
       };
 
+      let exitCode: number | null = null;
+      let exitSignal: string | null = null;
+
+      const completed = (): CommandOutcome => ({
+        kind: 'completed',
+        exitCode,
+        signal: exitSignal,
+        stdout,
+        stderr,
+        timedOut,
+        cancelled,
+        outputCapped,
+        durationMs: Date.now() - startedAt,
+        enforcement: this.enforcement(request.containment.mode),
+      });
+
       child.on('error', (error: Error) => {
         settle({
           kind: 'spawn-failed',
-          message: `could not run '${file}': ${error.message}`,
+          message: describeSpawnFailure(error, file, request.cwd),
           durationMs: Date.now() - startedAt,
         });
       });
 
+      /**
+       * The process is gone. Settle here **only when it was killed.**
+       *
+       * `close` is the honest moment for a command that ended on its own: it fires once
+       * every stdio pipe has drained, which is what guarantees the last bytes of output
+       * were collected. But those pipes are inherited by descendants, and a descendant
+       * that outlives the kill holds them open — so on a kill, `close` can be withheld for
+       * as long as the descendant runs.
+       *
+       * That made the timeout bound nothing for any command that spawns a child, which is
+       * every `bash -lc` running a real program. Measured: a killed `bash -lc "sleep 12"`
+       * fires `exit` at 1.5 s and `close` at 12.5 s, and a turn given `--max-time 15`
+       * against `sleep 90` took 94 s — the shell died on schedule and the engine waited
+       * anyway.
+       *
+       * Settling early is sound precisely because we killed it: the decision to stop
+       * caring about further output has already been made, and whatever arrived before the
+       * kill is still reported.
+       *
+       * The descendant itself is **not** killed with its parent — see the class comment.
+       */
+      child.on('exit', (code, signal) => {
+        exitCode = code;
+        exitSignal = signal;
+        if (!timedOut && !cancelled) return;
+        // Outcome first, so what it reports is exactly what had arrived by the kill.
+        settle(completed());
+        // Then let go of the pipes. A descendant that outlived the kill still holds them,
+        // and libuv keeps the event loop alive for as long as they are open — so without
+        // this the *process* does not exit either. Measured end to end: a correctly
+        // bounded 15-second turn against `sleep 90` left `adze run` alive for 93 seconds.
+        child.stdin?.destroy();
+        child.stdout?.destroy();
+        child.stderr?.destroy();
+        child.unref();
+      });
+
       child.on('close', (code, signal) => {
-        settle({
-          kind: 'completed',
-          exitCode: code,
-          signal,
-          stdout,
-          stderr,
-          timedOut,
-          cancelled,
-          outputCapped,
-          durationMs: Date.now() - startedAt,
-          enforcement: this.enforcement(request.containment.mode),
-        });
+        if (code !== null) exitCode = code;
+        if (signal !== null) exitSignal = signal;
+        settle(completed());
       });
 
       if (request.stdin !== undefined) {

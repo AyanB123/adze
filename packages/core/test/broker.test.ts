@@ -1,3 +1,4 @@
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { NodeSubprocessBroker, NullBroker, scrubEnvironment } from '../src/broker.js';
 
@@ -10,11 +11,11 @@ function script(source: string): readonly string[] {
 
 function request(
   command: readonly string[],
-  over: { timeoutMs?: number; signal?: AbortSignal } = {},
+  over: { timeoutMs?: number; signal?: AbortSignal; cwd?: string } = {},
 ) {
   return {
     command,
-    cwd: process.cwd(),
+    cwd: over.cwd ?? process.cwd(),
     env: {},
     timeoutMs: over.timeoutMs ?? 10_000,
     signal: over.signal ?? new AbortController().signal,
@@ -67,6 +68,36 @@ describe('NodeSubprocessBroker — stateless execution', () => {
     expect(outcome.message).toContain('definitely-not-a-real-program-xyzzy');
   });
 
+  it('blames the working directory, not the program, when the cwd does not exist', async () => {
+    // Found driving a real model on Windows. Node reports a missing `cwd` and a missing
+    // executable identically — both arrive as ENOENT with `path` set to the *program* —
+    // so the message said "could not run 'bash': spawn bash ENOENT" for a bash that was
+    // installed and on PATH. The model read that, concluded the shell was unavailable,
+    // and spent a dozen steps working around a shell that worked. The failure text is
+    // written for a model to retry against, so it has to name the thing that failed.
+    const missing = join(process.cwd(), 'no-such-directory-xyzzy', 'nested');
+    const outcome = await new NodeSubprocessBroker({ env: {} }).exec(
+      request(script('process.stdout.write("ok")'), { cwd: missing }),
+    );
+
+    expect(outcome.kind).toBe('spawn-failed');
+    if (outcome.kind !== 'spawn-failed') return;
+    expect(outcome.message).toContain('working directory');
+    expect(outcome.message).toContain(missing);
+  });
+
+  it('still names the program when the cwd exists and the program does not', async () => {
+    // The other half of the same distinction: a genuinely missing executable must not
+    // start being reported as a directory problem.
+    const outcome = await new NodeSubprocessBroker({ env: {} }).exec(
+      request(['definitely-not-a-real-program-xyzzy'], { cwd: process.cwd() }),
+    );
+    expect(outcome.kind).toBe('spawn-failed');
+    if (outcome.kind !== 'spawn-failed') return;
+    expect(outcome.message).toContain('definitely-not-a-real-program-xyzzy');
+    expect(outcome.message).not.toContain('working directory');
+  });
+
   it('rejects an empty command', async () => {
     const outcome = await new NodeSubprocessBroker({ env: {} }).exec(request([]));
     expect(outcome.kind).toBe('spawn-failed');
@@ -80,6 +111,38 @@ describe('NodeSubprocessBroker — stateless execution', () => {
     expect(outcome.timedOut).toBe(true);
     expect(outcome.exitCode).toBeNull();
   });
+
+  it('returns as soon as a killed command exits, even when a descendant holds the pipes', async () => {
+    // Found driving a real model on Windows. `--max-time 15` against `bash -lc "sleep 90"`
+    // produced a 94-second turn: the shell was killed on schedule, and then the engine
+    // waited anyway. `exec` settled on 'close', which does not fire until every stdio
+    // pipe has drained, and a surviving descendant inherits those pipes — so 'close' was
+    // withheld for as long as the descendant lived. Measured directly: a killed
+    // `bash -lc "sleep 12"` fired 'exit' at 1.5 s and 'close' at 12.5 s.
+    //
+    // The consequence is that a tool timeout bounded nothing for any command that spawns
+    // a child, which is every `bash -lc` that runs a real program.
+    const started = Date.now();
+    const outcome = await new NodeSubprocessBroker({ env: {} }).exec(
+      request(
+        // A detached grandchild inheriting stdio keeps the parent's pipes open after the
+        // parent is killed — measured at 15.2 s here against 12.6 s for the real
+        // `bash -lc "sleep 12"` case, so this reproduces the same mechanism using only
+        // `process.execPath` and stays portable across platforms.
+        script(
+          "require('node:child_process').spawn(process.execPath,['-e','setTimeout(()=>{},15000)'],{stdio:'inherit',detached:true});setTimeout(()=>{},15000)",
+        ),
+        { timeoutMs: 500 },
+      ),
+    );
+    const elapsed = Date.now() - started;
+
+    if (outcome.kind !== 'completed') throw new Error('expected completion');
+    expect(outcome.timedOut).toBe(true);
+    // The grandchild lives for 15 s. Anything near that means the kill did not bound
+    // the call.
+    expect(elapsed).toBeLessThan(6_000);
+  }, 30_000);
 
   it('kills a command when the turn is cancelled', async () => {
     const controller = new AbortController();
