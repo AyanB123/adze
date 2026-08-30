@@ -2,7 +2,12 @@ import { describe, expect, it } from 'vitest';
 import type { Wrapped } from '../src/broker-base.js';
 import { planFor } from '../src/policy.js';
 import type { SeatbeltOptions } from '../src/seatbelt.js';
-import { buildSeatbeltProfile, SeatbeltBroker, seatbeltCapability } from '../src/seatbelt.js';
+import {
+  buildSeatbeltProfile,
+  expandSymlinkedRoots,
+  SeatbeltBroker,
+  seatbeltCapability,
+} from '../src/seatbelt.js';
 import type { CommandRequest, ContainmentPlan } from '../src/types.js';
 import { containmentFor, requestFor } from './support.js';
 
@@ -244,5 +249,82 @@ describe('SeatbeltBroker', () => {
     expect(wrapped.ok).toBe(true);
     if (!wrapped.ok) return;
     expect(wrapped.file).toBe('/usr/bin/sandbox-exec');
+  });
+});
+
+/**
+ * Regression tests for a sandbox that over-blocked.
+ *
+ * A write inside a declared writable root was denied with `EPERM` on macOS, because
+ * `os.tmpdir()` returns a path under `/var/folders` while `/var` is a symlink to
+ * `/private/var`. Seatbelt matches `subpath` against the path the kernel has already
+ * resolved, so the rule named a spelling the kernel never sees.
+ *
+ * The resolver is injected, so the macOS-only behaviour is asserted on every runner.
+ */
+describe('expandSymlinkedRoots', () => {
+  /** Stands in for macOS resolving `/var` to `/private/var`. */
+  const privatize = (path: string): string => path.replace(/^\/var\//, '/private/var/');
+
+  it('adds the resolved spelling alongside the declared one', () => {
+    expect(expandSymlinkedRoots(['/var/folders/ab/T/work'], privatize)).toEqual([
+      '/var/folders/ab/T/work',
+      '/private/var/folders/ab/T/work',
+    ]);
+  });
+
+  it('emits a single rule when the root is already canonical', () => {
+    expect(expandSymlinkedRoots(['/Users/me/proj'], privatize)).toEqual(['/Users/me/proj']);
+  });
+
+  it('keeps the declared root when resolution throws, because it may not exist yet', () => {
+    const missing = (): string => {
+      throw new Error('ENOENT');
+    };
+    expect(expandSymlinkedRoots(['/repo/not-created-yet'], missing)).toEqual([
+      '/repo/not-created-yet',
+    ]);
+  });
+
+  it('does not duplicate when two declared roots resolve to the same path', () => {
+    const collapse = (): string => '/private/var/same';
+    expect(expandSymlinkedRoots(['/var/same', '/private/var/same'], collapse)).toEqual([
+      '/var/same',
+      '/private/var/same',
+    ]);
+  });
+});
+
+describe('SeatbeltBroker with symlinked writable roots', () => {
+  it('grants writes to both the declared and the kernel-resolved path', () => {
+    const broker = new ExposedSeatbelt(true, {
+      platform: 'darwin',
+      resolvePath: (path) => path.replace(/^\/var\//, '/private/var/'),
+    });
+    const wrapped = broker.expose(
+      requestFor(['bash'], containmentFor('workspace-write')),
+      planWith('workspace-write', ['/var/folders/ab/T/work']),
+    );
+    expect(wrapped.ok).toBe(true);
+    if (!wrapped.ok) return;
+    const profile = wrapped.args[1];
+    // Without the resolved spelling the kernel matches neither rule and denies the
+    // write, which is the bug this test exists to prevent regressing.
+    expect(profile).toContain('(allow file-write* (subpath "/var/folders/ab/T/work"))');
+    expect(profile).toContain('(allow file-write* (subpath "/private/var/folders/ab/T/work"))');
+  });
+
+  it('still refuses a root that cannot be expressed, after resolution', () => {
+    const broker = new ExposedSeatbelt(true, {
+      platform: 'darwin',
+      resolvePath: (path) => path,
+    });
+    const wrapped = broker.expose(
+      requestFor(['bash'], containmentFor('workspace-write')),
+      planWith('workspace-write', ['/repo/a\nb']),
+    );
+    expect(wrapped.ok).toBe(false);
+    if (wrapped.ok) return;
+    expect(wrapped.code).toBe('mechanism-unavailable');
   });
 });

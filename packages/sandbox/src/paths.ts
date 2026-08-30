@@ -36,6 +36,14 @@
  * resolve paths in the kernel and are not fooled; the in-process fallback is, and
  * reports {@link Degradation} code `symlink-escape-unchecked` rather than implying
  * otherwise.
+ *
+ * Kernel resolution cuts both ways, and the second edge cost us a real bug. Because
+ * Seatbelt matches `subpath` against the path it has **already resolved**, a rule
+ * naming an unresolved spelling matches nothing — on macOS `/var` is a symlink to
+ * `/private/var`, so a writable root under `os.tmpdir()` was denied writes it should
+ * have allowed. Resolution is therefore a correctness obligation for whoever builds
+ * a profile, not only a safety property; see `expandSymlinkedRoots` in
+ * `seatbelt.ts`.
  */
 
 import { posix, win32 } from 'node:path';

@@ -43,6 +43,7 @@
  * through a shell and never through a temporary file.
  */
 
+import { realpathSync } from 'node:fs';
 import type { BaseBrokerOptions, Wrapped } from './broker-base.js';
 import { ContainedBroker, programNameRefusal, splitArgv } from './broker-base.js';
 import type { MechanismCapability } from './policy.js';
@@ -81,6 +82,56 @@ export interface SeatbeltOptions extends BaseBrokerOptions {
    * projects, and that is the mode working as specified rather than a defect.
    */
   readonly writableTemp?: readonly string[];
+  /**
+   * Resolves a path through symlinks. Defaults to `fs.realpathSync.native`.
+   *
+   * Injected so {@link expandSymlinkedRoots} is exercised on every runner rather
+   * than only on macOS.
+   */
+  readonly resolvePath?: (path: string) => string;
+}
+
+/**
+ * Expand writable roots to include their symlink-resolved spelling.
+ *
+ * macOS ships `/var`, `/tmp`, and `/etc` as symlinks into `/private`, and
+ * `os.tmpdir()` returns a path under `/var/folders`. Seatbelt evaluates `subpath`
+ * against the path the **kernel has already resolved**, so a rule naming
+ * `/var/folders/x` never matches a write the kernel sees as `/private/var/folders/x`.
+ * The write is then denied inside a directory the caller explicitly declared
+ * writable.
+ *
+ * That failure mode is worse than a crash. The sandbox over-blocks silently, and the
+ * `EPERM` surfaces as a bug in the user's compiler or package manager rather than in
+ * our profile — which is exactly the outcome the module docblock above says makes a
+ * sandbox get switched off. Kernel path resolution is documented elsewhere in this
+ * package as a safety property; it is also a correctness obligation, because a rule
+ * written in a spelling the kernel never sees is a rule about a path that does not
+ * exist.
+ *
+ * Both spellings are emitted rather than only the resolved one. A root that is
+ * already canonical resolves to itself, so the extra rule is inert; keeping the
+ * original means a `realpath` failure degrades to today's behaviour instead of
+ * dropping the root entirely.
+ */
+export function expandSymlinkedRoots(
+  roots: readonly string[],
+  resolve: (path: string) => string,
+): readonly string[] {
+  const expanded: string[] = [];
+  for (const root of roots) {
+    if (!expanded.includes(root)) expanded.push(root);
+    let resolved: string;
+    try {
+      resolved = resolve(root);
+    } catch {
+      // The root need not exist yet — a writable root is often created by the
+      // command we are about to run. The unresolved spelling is all we have.
+      continue;
+    }
+    if (resolved !== root && !expanded.includes(resolved)) expanded.push(resolved);
+  }
+  return expanded;
 }
 
 export type SeatbeltProfile =
@@ -204,7 +255,16 @@ export class SeatbeltBroker extends ContainedBroker {
     const optionLike = programNameRefusal(argv.file, 'sandbox-exec');
     if (optionLike !== undefined) return optionLike;
 
-    const built = buildSeatbeltProfile(plan, this.seatbelt);
+    // Resolve symlinked roots before the profile is built. `/var/folders/...` from
+    // `os.tmpdir()` must also appear as `/private/var/folders/...`, or the kernel
+    // matches neither and denies a write the caller declared legal.
+    const resolve = this.seatbelt.resolvePath ?? realpathSync.native;
+    const planned: ContainmentPlan = {
+      ...plan,
+      writableRoots: expandSymlinkedRoots(plan.writableRoots, resolve),
+    };
+
+    const built = buildSeatbeltProfile(planned, this.seatbelt);
     if (!built.ok) {
       return {
         ok: false,
