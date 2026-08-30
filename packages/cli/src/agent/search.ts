@@ -100,9 +100,7 @@ export class RetrievalSearchBackend implements SearchBackend {
   readonly name = 'local-retrieval';
 
   private readonly provider: RetrievalProvider;
-  private readonly listFiles: (
-    options: RipgrepListFilesOptions,
-  ) => Promise<RipgrepListFilesResult>;
+  private readonly listFiles: (options: RipgrepListFilesOptions) => Promise<RipgrepListFilesResult>;
 
   constructor(options: RetrievalBackendOptions) {
     this.provider = options.provider ?? new LocalRetrievalProvider({ root: options.root });
@@ -124,7 +122,11 @@ export class RetrievalSearchBackend implements SearchBackend {
       // forcing `insensitive` here would silently change what `grep` matches.
       ...(query.caseSensitive === undefined
         ? {}
-        : { caseSensitivity: query.caseSensitive ? ('sensitive' as const) : ('insensitive' as const) }),
+        : {
+            caseSensitivity: query.caseSensitive
+              ? ('sensitive' as const)
+              : ('insensitive' as const),
+          }),
     });
 
     return {

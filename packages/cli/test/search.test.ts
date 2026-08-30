@@ -64,7 +64,14 @@ function hit(name: string, extractor: SymbolExtractor, kind: SymbolKind = 'funct
     symbol: {
       name,
       kind,
-      range: { startLine: 7, startColumn: 1, endLine: 9, endColumn: 2, startIndex: 0, endIndex: 20 },
+      range: {
+        startLine: 7,
+        startColumn: 1,
+        endLine: 9,
+        endColumn: 2,
+        startIndex: 0,
+        endIndex: 20,
+      },
     },
   };
 }
@@ -80,6 +87,9 @@ function fakeProvider(replies: {
   const searchCalls: RetrievalRequest[] = [];
   const definitionCalls: DefinitionRequest[] = [];
   return {
+    // `RetrievalProvider.name` is not optional. Omitting it did not fail the suite,
+    // because vitest transpiles without typechecking - only `tsc --noEmit` caught it.
+    name: 'fake-retrieval',
     searchCalls,
     definitionCalls,
     async capabilities() {
@@ -122,8 +132,20 @@ describe('grep crosses the seam without being reinterpreted', () => {
     const provider = fakeProvider({});
     const search = backend(provider);
 
-    await search.search({ query: 'a.b', mode: 'regex', root: ROOT, maxResults: 10, timeoutMs: 500 });
-    await search.search({ query: 'a.b', mode: 'literal', root: ROOT, maxResults: 10, timeoutMs: 500 });
+    await search.search({
+      query: 'a.b',
+      mode: 'regex',
+      root: ROOT,
+      maxResults: 10,
+      timeoutMs: 500,
+    });
+    await search.search({
+      query: 'a.b',
+      mode: 'literal',
+      root: ROOT,
+      maxResults: 10,
+      timeoutMs: 500,
+    });
 
     expect(provider.searchCalls.map((call) => call.mode)).toEqual(['regex', 'literal']);
   });
@@ -146,8 +168,22 @@ describe('grep crosses the seam without being reinterpreted', () => {
   it('maps a boolean caseSensitive onto the provider vocabulary', async () => {
     const provider = fakeProvider({});
     const search = backend(provider);
-    await search.search({ query: 'x', mode: 'literal', root: ROOT, maxResults: 1, timeoutMs: 500, caseSensitive: true });
-    await search.search({ query: 'x', mode: 'literal', root: ROOT, maxResults: 1, timeoutMs: 500, caseSensitive: false });
+    await search.search({
+      query: 'x',
+      mode: 'literal',
+      root: ROOT,
+      maxResults: 1,
+      timeoutMs: 500,
+      caseSensitive: true,
+    });
+    await search.search({
+      query: 'x',
+      mode: 'literal',
+      root: ROOT,
+      maxResults: 1,
+      timeoutMs: 500,
+      caseSensitive: false,
+    });
 
     expect(provider.searchCalls.map((call) => call.caseSensitivity)).toEqual([
       'sensitive',
@@ -331,7 +367,13 @@ describe('symbols reports the weakest evidence, never the best', () => {
   it('passes a kind filter through and omits it when absent', async () => {
     const provider = fakeProvider({});
     const search = backend(provider);
-    await search.symbols({ name: 'x', root: ROOT, maxResults: 5, timeoutMs: 500, kinds: ['class'] });
+    await search.symbols({
+      name: 'x',
+      root: ROOT,
+      maxResults: 5,
+      timeoutMs: 500,
+      kinds: ['class'],
+    });
     await search.symbols({ name: 'x', root: ROOT, maxResults: 5, timeoutMs: 500 });
 
     expect(provider.definitionCalls[0]?.kinds).toEqual(['class']);

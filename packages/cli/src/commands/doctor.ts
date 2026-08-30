@@ -276,7 +276,9 @@ function renderProviders(section: ProviderSection, io: Io, style: Style): void {
         : provider.usable
           ? style.dim('no credential — optional for openai-compatible')
           : style.warn('no credential');
-    io.out(`  ${provider.usable ? style.good('ok  ') : style.warn('warn')} ${provider.id.padEnd(10)} ${provider.kind} · ${credential}\n`);
+    io.out(
+      `  ${provider.usable ? style.good('ok  ') : style.warn('warn')} ${provider.id.padEnd(10)} ${provider.kind} · ${credential}\n`,
+    );
     if (provider.baseURL !== undefined) {
       io.out(`                  ${style.dim(provider.baseURL)}\n`);
     }
