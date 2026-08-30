@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -236,25 +236,59 @@ describe('stdin', () => {
 
 describe('teardown reaches descendants', () => {
   /**
-   * A timeout that leaves a grandchild running has not enforced a timeout, it has
-   * hidden one. The child here starts a long-lived grandchild and reports its pid;
-   * after the timeout fires, that pid must be gone.
+   * A child that reports its grandchild's pid through a file rather than stdout.
+   *
+   * These tests originally aborted on a fixed 1s timer and read the pid from
+   * `stdout`. That races the child's startup: two Node cold starts plus a write do
+   * not reliably fit in a second on a loaded CI runner, and when they do not,
+   * `stdout` is empty, `Number('')` is `0`, and the assertion checks pid 0. On POSIX
+   * `process.kill(0, 0)` addresses the *current process group*, so `alive(0)` returns
+   * true and the test spends its whole 8s budget before failing for a reason that has
+   * nothing to do with teardown. A file lets the test wait for the grandchild to
+   * genuinely exist before it cancels anything.
    */
-  it('kills a grandchild when the command times out', async () => {
-    const spawner =
+  function spawnerWriting(pidFile: string): string {
+    return (
       'const { spawn } = require("node:child_process"); ' +
+      'const fs = require("node:fs"); ' +
       'const c = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], ' +
       '{ stdio: "ignore" }); ' +
-      'process.stdout.write(String(c.pid)); ' +
-      'setTimeout(() => {}, 60000);';
+      `fs.writeFileSync(${JSON.stringify(pidFile)}, String(c.pid)); ` +
+      'setTimeout(() => {}, 60000);'
+    );
+  }
 
-    const outcome = completed(await run(['-e', spawner], { timeoutMs: 1_500 }));
+  /** Block until the child has published a usable pid, or fail with a clear reason. */
+  async function reportedPid(file: string, budgetMs: number): Promise<number> {
+    const deadline = Date.now() + budgetMs;
+    while (Date.now() < deadline) {
+      try {
+        const pid = Number((await readFile(file, 'utf8')).trim());
+        if (Number.isInteger(pid) && pid > 0) return pid;
+      } catch {
+        // Not written yet. The child is still starting.
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`the child never reported a grandchild pid within ${budgetMs}ms`);
+  }
+
+  /**
+   * A timeout that leaves a grandchild running has not enforced a timeout, it has
+   * hidden one. After the timeout fires, the reported pid must be gone.
+   */
+  it('kills a grandchild when the command times out', async () => {
+    const dir = await scratch();
+    const pidFile = join(dir, 'grandchild.pid');
+
+    // Generous enough for two Node cold starts on a slow runner, so the timeout
+    // fires after the grandchild exists rather than racing it.
+    const outcome = completed(
+      await run(['-e', spawnerWriting(pidFile)], { cwd: dir, timeoutMs: 4_000 }),
+    );
     expect(outcome.timedOut).toBe(true);
 
-    const grandchild = Number(outcome.stdout.trim());
-    expect(Number.isInteger(grandchild)).toBe(true);
-    expect(grandchild).toBeGreaterThan(0);
-
+    const grandchild = await reportedPid(pidFile, 5_000);
     try {
       expect(await gone(grandchild, 8_000)).toBe(true);
     } finally {
@@ -264,20 +298,24 @@ describe('teardown reaches descendants', () => {
   });
 
   it('kills a grandchild when the turn is cancelled', async () => {
-    const spawner =
-      'const { spawn } = require("node:child_process"); ' +
-      'const c = spawn(process.execPath, ["-e", "setTimeout(() => {}, 60000)"], ' +
-      '{ stdio: "ignore" }); ' +
-      'process.stdout.write(String(c.pid)); ' +
-      'setTimeout(() => {}, 60000);';
+    const dir = await scratch();
+    const pidFile = join(dir, 'grandchild.pid');
 
     const controller = new AbortController();
-    const pending = run(['-e', spawner], { signal: controller.signal });
-    setTimeout(() => controller.abort(), 1_000);
+    const pending = run(['-e', spawnerWriting(pidFile)], {
+      cwd: dir,
+      signal: controller.signal,
+    });
+
+    // Cancel only once the grandchild is known to be running. Aborting on a timer
+    // would sometimes cancel before there was anything to tear down, which proves
+    // nothing.
+    const grandchild = await reportedPid(pidFile, 30_000);
+    controller.abort();
+
     const outcome = completed(await pending);
     expect(outcome.cancelled).toBe(true);
 
-    const grandchild = Number(outcome.stdout.trim());
     try {
       expect(await gone(grandchild, 8_000)).toBe(true);
     } finally {
