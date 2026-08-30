@@ -234,6 +234,33 @@ describe('stdin', () => {
   });
 });
 
+describe('stdin is closed without crashing the engine', () => {
+  /**
+   * Found by CI, not by design: `write EPIPE` arrived as an *uncaught exception* and
+   * failed the sandbox suite on macOS while every test passed.
+   *
+   * `child.on('error')` covers a spawn failure, not a stream failure, so the write to
+   * `child.stdin` had no handler at all. A command that exits before draining its
+   * input leaves nothing on the other end of the pipe, and the resulting EPIPE took
+   * down the whole process rather than failing one command — in production that is an
+   * agent turn dying because a tool did something completely ordinary.
+   */
+  it('survives a command that exits before reading its stdin', async () => {
+    // Large enough that the write cannot complete before the child is gone.
+    const outcome = completed(
+      await run(['-e', 'process.exit(0)'], { stdin: 'x'.repeat(1_000_000) }),
+    );
+    expect(outcome.exitCode).toBe(0);
+  });
+
+  it('still delivers stdin to a command that reads it', async () => {
+    const outcome = completed(
+      await run(['-e', 'process.stdin.pipe(process.stdout)'], { stdin: 'round-trip' }),
+    );
+    expect(outcome.stdout).toBe('round-trip');
+  });
+});
+
 describe('teardown reaches descendants', () => {
   /**
    * A child that reports its grandchild's pid through a file rather than stdout.
@@ -281,21 +308,26 @@ describe('teardown reaches descendants', () => {
     const dir = await scratch();
     const pidFile = join(dir, 'grandchild.pid');
 
-    // Generous enough for two Node cold starts on a slow runner, so the timeout
-    // fires after the grandchild exists rather than racing it.
+    // Generous on purpose. The timeout has to fire *after* the grandchild exists, and
+    // two Node cold starts on a loaded Windows runner do not fit in a few seconds —
+    // a 4s budget failed there while passing locally. A timeout test costs its
+    // timeout; the alternative is a race that only shows up in CI.
     const outcome = completed(
-      await run(['-e', spawnerWriting(pidFile)], { cwd: dir, timeoutMs: 4_000 }),
+      await run(['-e', spawnerWriting(pidFile)], { cwd: dir, timeoutMs: 15_000 }),
     );
     expect(outcome.timedOut).toBe(true);
 
-    const grandchild = await reportedPid(pidFile, 5_000);
+    const grandchild = await reportedPid(pidFile, 12_000);
     try {
-      expect(await gone(grandchild, 8_000)).toBe(true);
+      expect(await gone(grandchild, 15_000)).toBe(true);
     } finally {
       // Whatever the assertion did, this test does not get to leave a process behind.
       killProcessTree(grandchild, process.platform);
     }
-  });
+    // Vitest's default per-test ceiling is 5s, which a timeout test cannot fit inside:
+    // the command's own 15s timeout has to fire first. This is a ceiling, not a cost —
+    // the normal path is about 16s.
+  }, 60_000);
 
   it('kills a grandchild when the turn is cancelled', async () => {
     const dir = await scratch();
@@ -321,7 +353,9 @@ describe('teardown reaches descendants', () => {
     } finally {
       killProcessTree(grandchild, process.platform);
     }
-  });
+    // Ceiling, not a cost: waiting for the grandchild plus the teardown budget can
+    // exceed Vitest's 5s default on a loaded runner, though the normal path is ~2s.
+  }, 60_000);
 });
 
 describe('killProcessTree', () => {
