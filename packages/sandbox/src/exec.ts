@@ -226,6 +226,17 @@ export async function runContained(plan: SpawnPlan, options: RunOptions): Promis
     // Closed unconditionally rather than left open. A command that reads stdin and
     // never receives EOF hangs until the timeout, which turns a fast failure into a
     // slow one and burns the turn's budget on nothing.
+    //
+    // The pipe needs its own error handler. `child.on('error')` covers spawn
+    // failures, not stream failures, so a child that exits before reading stdin
+    // leaves this write with nothing on the other end and it raises EPIPE as an
+    // **uncaught exception** — which kills the engine's process rather than failing
+    // one command. A command exiting without draining its input is ordinary (`head
+    // -1` does it by design), and its outcome is already reported through `close`,
+    // so the stream error is swallowed here rather than surfaced twice.
+    child.stdin?.on('error', () => {
+      // Intentionally empty; see above.
+    });
     child.stdin?.end(options.stdin ?? '');
   });
 }
