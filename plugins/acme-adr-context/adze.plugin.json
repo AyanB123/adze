@@ -1,0 +1,26 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "acme.adr-context",
+  "version": "1.0.0",
+  "displayName": "ADR Context",
+  "description": "Pulls the team's architecture decision records into context on @adr, and adds a review command and a security-reviewer subagent.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "contextProviders": [
+      {
+        "type": "glob",
+        "name": "adr",
+        "patterns": ["docs/architecture/adr/**/*.md"],
+        "trigger": "@adr",
+        "maxBytes": 32768
+      }
+    ],
+    "commands": [{ "path": "commands/review.md" }],
+    "agents": [{ "path": "agents/security.md" }]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}
