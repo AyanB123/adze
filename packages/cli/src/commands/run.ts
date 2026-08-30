@@ -27,7 +27,7 @@ import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
 import { buildAgent } from '../agent/setup.js';
 import { type RunSummary, renderSummary, summaryJson } from '../agent/summary.js';
-import { EXIT, type ExitCode, type Io, styleFor, writeJson } from '../output.js';
+import { EXIT, type ExitCode, type Io, styleFor, writeJsonLine } from '../output.js';
 
 export interface RunOptions extends AgentFlags {
   /** Test seam: a scripted approval channel and a mock model, so no key is needed. */
@@ -165,7 +165,9 @@ export async function runRun(
       droppedEvents: renderer.droppedEvents,
     };
 
-    if (invocation.json) writeJson(io, summaryJson(summary));
+    // One line, not indented: this goes onto the same stdout stream the renderer has been
+    // writing one event per line to, and a consumer parses it line by line.
+    if (invocation.json) writeJsonLine(io, summaryJson(summary));
     else renderSummary(summary, io, style);
 
     await agent.engine.sessionClose({ sessionId });

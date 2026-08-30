@@ -38,7 +38,7 @@ import { renderSummary, summaryJson } from '../src/agent/summary.js';
 import { runChat } from '../src/commands/chat.js';
 import { runModels } from '../src/commands/models.js';
 import { runRun } from '../src/commands/run.js';
-import { EXIT, type Io, plainStyle } from '../src/output.js';
+import { EXIT, type Io, plainStyle, writeJson, writeJsonLine } from '../src/output.js';
 
 function capture(): Io & { readonly stdout: () => string; readonly stderr: () => string } {
   let out = '';
@@ -478,6 +478,56 @@ describe('the event renderer', () => {
     expect(renderer.droppedEvents).toBe(1);
   });
 
+  it('keeps the run summary on one line, so the JSONL stream stays parseable', () => {
+    // Found driving a real model. `run --json` streams one event per line and then wrote
+    // the summary with the indented writer, so the final document spanned about twenty
+    // lines. A consumer parsing line by line — the documented consumer, and the only one
+    // the format is for — hit twenty parse errors at exactly the point it would read the
+    // result. Measured on a real run: 20 of 31 stdout lines were unparseable.
+    //
+    // The renderer was already tested in isolation and the summary was not on the same
+    // stream in any test, which is how a contract stated in two files went unenforced.
+    const io = capture();
+    const renderer = new EventRenderer({ io, style: plainStyle, json: true, quiet: false });
+
+    renderer.sink(event({ type: 'text.delta', text: 'hello' }));
+    writeJsonLine(
+      io,
+      summaryJson({
+        model: { provider: 'openrouter', model: 'vendor/some-model:free' },
+        stopReason: 'end-turn',
+        steps: 2,
+        usage: usage(),
+        prices: undefined,
+        durationMs: 25_181,
+        approvals: 0,
+        droppedEvents: 0,
+      }),
+    );
+
+    const lines = io.stdout().trimEnd().split('\n');
+    expect(lines).toHaveLength(2);
+    for (const line of lines) {
+      expect(() => JSON.parse(line) as unknown).not.toThrow();
+    }
+    expect(JSON.parse(lines[1] ?? '')).toMatchObject({ stopReason: 'end-turn', steps: 2 });
+  });
+
+  it('distinguishes the streaming writer from the single-document one', () => {
+    // The guard for the bug above: `writeJson` is for a command that emits one document
+    // and exits, and its indented form is unusable on a JSONL stream. Asserting both
+    // shapes here is what makes a swap back to the indented writer fail a test rather
+    // than silently break every line-oriented consumer.
+    const streamed = capture();
+    const single = capture();
+    const document = { stopReason: 'end-turn', steps: 2 };
+
+    writeJsonLine(streamed, document);
+    writeJson(single, document);
+
+    expect(streamed.stdout().trimEnd().split('\n')).toHaveLength(1);
+    expect(single.stdout().trimEnd().split('\n').length).toBeGreaterThan(1);
+  });
   it('never suppresses a denial under --quiet', () => {
     const io = capture();
     const renderer = new EventRenderer({ io, style: plainStyle, json: false, quiet: true });

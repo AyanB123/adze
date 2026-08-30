@@ -78,9 +78,35 @@ export function styleFor(json: boolean): Style {
   return json ? plainStyle : colorStyle;
 }
 
-/** One JSON document per invocation, newline-terminated, nothing else on stdout. */
+/**
+ * One JSON document per invocation, indented, newline-terminated.
+ *
+ * For the commands that emit exactly one document and then exit — `doctor`, `models`,
+ * `apply`, `validate`. Indentation is readable there and costs nothing, because there is
+ * no second document for it to run into.
+ *
+ * **Not for a JSONL stream.** See {@link writeJsonLine}.
+ */
 export function writeJson(io: Io, value: unknown): void {
   io.out(`${JSON.stringify(value, null, 2)}\n`);
+}
+
+/**
+ * One JSON document on **one line**, for a stream where each line is a document.
+ *
+ * `run --json` and `chat --json` emit JSONL: the renderer writes one event per line and a
+ * consumer reads it line by line. The run summary goes onto that same stream, so it has to
+ * obey the same rule.
+ *
+ * It did not. The summary was written with {@link writeJson}, whose indented form spans
+ * roughly twenty lines, so the last document of every JSON run arrived as twenty parse
+ * errors — at exactly the point a consumer would read the result. The contract is stated
+ * in `agent/render.ts` ("one event per line, verbatim") and again in `agent/approval.ts`
+ * ("stdout carries the JSONL event stream and nothing else"); this function is what makes
+ * the summary keep it.
+ */
+export function writeJsonLine(io: Io, value: unknown): void {
+  io.out(`${JSON.stringify(value)}\n`);
 }
 
 /** `label: value` with the label padded, for the aligned blocks `doctor` prints. */
