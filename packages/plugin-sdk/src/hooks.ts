@@ -124,6 +124,30 @@ export interface EditPrePayload {
   readonly edits: readonly { readonly search: string; readonly replace: string }[];
   readonly wholeFile: boolean;
   readonly approvedByHuman: boolean;
+  /**
+   * The bytes a whole-file write would leave on disk. Present when `wholeFile` is
+   * true, absent for a search/replace edit whose content is in `edits`.
+   *
+   * **Inspect this, not the raw arguments.** A content policy written against
+   * `edits[].replace` alone is a policy that passes a whole-file write, which is how
+   * this field came to exist: without it, a secrets guard refused a credential added
+   * by `edit` and allowed the same credential written by `write`.
+   */
+  readonly content?: string;
+  /**
+   * The tool's raw arguments as they stand at this point in the hook chain.
+   *
+   * Declared because it was already on the wire and undeclared, which is the worse
+   * of the two states: a guest could read `arguments.content`, nothing promised it,
+   * and a later change making the serializer match this interface would have silently
+   * broken every policy that did. Declaring it makes the promise real.
+   *
+   * It is the lower-level escape hatch, not the field to reach for first. Reading
+   * tool-specific argument names couples a policy to which tool produced the edit,
+   * which is the coupling `edit.pre` exists to remove — prefer `path`, `edits`,
+   * `wholeFile` and `content`.
+   */
+  readonly arguments: JsonObject;
 }
 
 export interface EditPostPayload {
@@ -722,6 +746,10 @@ function toJson(
     edits: data.edits.map((edit) => ({ search: edit.search, replace: edit.replace })),
     wholeFile: data.wholeFile,
     approvedByHuman: data.approvedByHuman,
+    // Whole-file bytes, so a guest can police a `write` without knowing it was a
+    // `write`. Omitted rather than sent as null when the edit is search/replace: a
+    // guest checking `content === undefined` should not have to also check for null.
+    ...(data.content === undefined ? {} : { content: data.content }),
     arguments: args,
   };
 }

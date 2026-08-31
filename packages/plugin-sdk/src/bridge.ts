@@ -73,6 +73,20 @@ export interface EditShape {
   readonly path: string;
   readonly edits: readonly { readonly search: string; readonly replace: string }[];
   readonly wholeFile: boolean;
+  /**
+   * The bytes a whole-file write would leave on disk, when this call is one.
+   *
+   * Present for `write`, and for `edit` when it carries a `replacement`. Absent for a
+   * search/replace edit, where `edits` already holds the content being introduced.
+   *
+   * This field exists because omitting it was a policy bypass. A guard registered on
+   * `edit.pre` and inspecting `edits[].replace` — the only content the payload used to
+   * carry — refused a credential added by `edit` and allowed the identical credential
+   * written by `write`, because a whole-file write reported `edits: []`. The bytes were
+   * reachable only through the raw tool arguments, which forced a policy to know which
+   * tool produced the edit: exactly the coupling `edit.pre` exists to remove.
+   */
+  readonly content?: string;
 }
 
 export type EditShapeReader = (args: JsonObject) => EditShape | undefined;
@@ -92,14 +106,30 @@ export const readCoreEditArgs: EditShapeReader = (args) => {
       edits.push({ search, replace });
     }
   }
-  return { path, edits, wholeFile: typeof args.replacement === 'string' };
+  // `edit` takes a whole-file `replacement` for the applier's second tier, and that
+  // path had the same hole `write` did: `wholeFile` went true while the replacement
+  // bytes were dropped, so a content policy saw an empty edit list either way.
+  const replacement = args.replacement;
+  const wholeFile = typeof replacement === 'string';
+  return {
+    path,
+    edits,
+    wholeFile,
+    ...(wholeFile ? { content: replacement } : {}),
+  };
 };
 
 /** Reads core's `write` tool arguments: a whole-file replacement. */
 export const readCoreWriteArgs: EditShapeReader = (args) => {
   const path = args.path;
   if (typeof path !== 'string') return undefined;
-  return { path, edits: [], wholeFile: true };
+  const content = args.content;
+  return {
+    path,
+    edits: [],
+    wholeFile: true,
+    ...(typeof content === 'string' ? { content } : {}),
+  };
 };
 
 export const DEFAULT_EDIT_TOOLS: Readonly<Record<string, EditShapeReader>> = {
@@ -198,15 +228,7 @@ export function toRegisteredHook(options: BridgeOptions): RegisteredHook {
       if (reader !== undefined && host.forEvent('edit.pre').length > 0) {
         const shape = reader(args);
         if (shape !== undefined) {
-          const payload: EditPrePayload = {
-            sessionId: context.sessionId,
-            turnId: context.turnId,
-            callId: context.callId,
-            path: shape.path,
-            edits: shape.edits,
-            wholeFile: shape.wholeFile,
-            approvedByHuman: approvedByHuman(shape.path),
-          };
+          const payload = editPrePayload(context, shape, args, approvedByHuman);
           const editDecision = await host.fireDecision('edit.pre', payload, args);
           if (editDecision.kind === 'deny') return denyOutcome(editDecision);
           if (editDecision.kind === 'modify') {
@@ -271,6 +293,33 @@ export function toRegisteredHook(options: BridgeOptions): RegisteredHook {
 
 function denyOutcome(decision: Extract<HookDecision, { kind: 'deny' }>): ToolPreOutcome {
   return { kind: 'deny', reason: `${decision.pluginId}: ${decision.reason}` };
+}
+
+/**
+ * The payload an `edit.pre` hook receives.
+ *
+ * A named function rather than an inline literal so that `toolPre` stays under the
+ * cognitive-complexity ceiling, and so the one conditional field has somewhere to be
+ * explained: `content` is omitted rather than sent as undefined, because a guest that
+ * checks `content === undefined` should not also have to handle null on the wire.
+ */
+function editPrePayload(
+  context: ToolPreContext,
+  shape: EditShape,
+  args: JsonObject,
+  approvedByHuman: (path: string) => boolean,
+): EditPrePayload {
+  return {
+    sessionId: context.sessionId,
+    turnId: context.turnId,
+    callId: context.callId,
+    path: shape.path,
+    edits: shape.edits,
+    wholeFile: shape.wholeFile,
+    approvedByHuman: approvedByHuman(shape.path),
+    arguments: args,
+    ...(shape.content === undefined ? {} : { content: shape.content }),
+  };
 }
 
 /**

@@ -109,6 +109,10 @@ function harness(
     schema: z.object({
       path: z.string().optional(),
       edits: z.array(z.object({ search: z.string(), replace: z.string() })).optional(),
+      // `content` is `write`'s whole-file argument and `replacement` is `edit`'s. Both
+      // are needed to reach the whole-file branches of the edit-shape readers.
+      content: z.string().optional(),
+      replacement: z.string().optional(),
       note: z.string().optional(),
     }),
     // No declared effects, so the gate allows. See the file header.
@@ -257,6 +261,152 @@ describe('an edit.pre denial stops an edit before anything is written', () => {
 
     expect(outcome.kind).toBe('executed');
     expect(h.seen()).toEqual({ note: 'hello' });
+  });
+});
+
+/**
+ * The bypass reported in `plugins/FINDINGS.md`.
+ *
+ * A guard registered on `edit.pre` refused a credential added by `edit` and allowed the
+ * identical credential written by `write`, because a whole-file write reported
+ * `edits: []` and the payload carried the bytes nowhere. The content was reachable only
+ * through the raw tool arguments, so the only working guard was one that knew which tool
+ * had produced the edit — the coupling `edit.pre` exists to remove.
+ *
+ * Every guard below reads **only** the tool-agnostic payload fields. That restraint is
+ * the test: a guard allowed to read `arguments` would have passed before the fix.
+ */
+function secretGuard(pluginId: string): HookInstance {
+  return {
+    pluginId,
+    event: 'edit.pre',
+    module: `hooks/${pluginId}.mjs`,
+    runtime: 'js',
+    timeoutMs: 1_000,
+    exportName: 'onEvent',
+    guest: fakeGuest((_functionName, input) => {
+      const payload = input as {
+        readonly content?: string;
+        readonly edits?: readonly { readonly replace: string }[];
+      };
+      const introduced = [payload.content ?? '', ...(payload.edits ?? []).map((e) => e.replace)];
+      return introduced.some((text) => text.includes('AKIAIOSFODNN7EXAMPLE'))
+        ? { kind: 'deny', reason: 'a credential must not be written to a file' }
+        : { kind: 'allow' };
+    }),
+  };
+}
+
+/** Records the payload a hook was handed, then allows. */
+function capturing(pluginId: string, sink: JsonValue[]): HookInstance {
+  return {
+    pluginId,
+    event: 'edit.pre',
+    module: `hooks/${pluginId}.mjs`,
+    runtime: 'js',
+    timeoutMs: 1_000,
+    exportName: 'onEvent',
+    guest: fakeGuest((_functionName, input) => {
+      sink.push(input);
+      return { kind: 'allow' };
+    }),
+  };
+}
+
+const CREDENTIAL = 'AKIAIOSFODNN7EXAMPLE';
+
+describe('a content policy on edit.pre covers whole-file writes', () => {
+  it('denies a credential written by write, not only one added by edit', async () => {
+    // The bypass itself. Before `content` was on the payload this call was allowed,
+    // because `edits` is empty for a whole-file write and the guard had nothing to read.
+    const h = harness([secretGuard('acme.secrets')], { toolName: 'write' });
+
+    const outcome = await dispatch(h, 'write', {
+      path: 'src/config.ts',
+      content: `export const key = '${CREDENTIAL}';\n`,
+    });
+
+    expect(outcome.kind).toBe('denied');
+    if (outcome.kind !== 'denied') return;
+    expect(outcome.source).toBe('hook');
+    expect(outcome.reason).toContain('credential');
+    expect(h.seen()).toBeUndefined();
+  });
+
+  it('denies the same credential in a search/replace edit', async () => {
+    // The half that already worked. Kept so the two paths are asserted to agree —
+    // identical bytes reaching disk must get the identical verdict.
+    const h = harness([secretGuard('acme.secrets')], { toolName: 'edit' });
+
+    const outcome = await dispatch(h, 'edit', {
+      path: 'src/config.ts',
+      edits: [{ search: 'const key', replace: `const key = '${CREDENTIAL}'` }],
+    });
+
+    expect(outcome.kind).toBe('denied');
+    expect(h.seen()).toBeUndefined();
+  });
+
+  it('denies a credential in a whole-file replacement passed to edit', async () => {
+    // The second instance of the same hole, not reported in FINDINGS: `edit` accepts a
+    // whole-file `replacement` for the applier's second tier, and the reader set
+    // `wholeFile: true` while dropping those bytes exactly as `write` did.
+    const h = harness([secretGuard('acme.secrets')], { toolName: 'edit' });
+
+    const outcome = await dispatch(h, 'edit', {
+      path: 'src/config.ts',
+      replacement: `export const key = '${CREDENTIAL}';\n`,
+    });
+
+    expect(outcome.kind).toBe('denied');
+    if (outcome.kind !== 'denied') return;
+    expect(outcome.source).toBe('hook');
+    expect(h.seen()).toBeUndefined();
+  });
+
+  it('lets a clean whole-file write through', async () => {
+    // The guard has to be capable of allowing, or the three denials above would also
+    // pass against a hook that denied everything.
+    const h = harness([secretGuard('acme.secrets')], { toolName: 'write' });
+
+    const outcome = await dispatch(h, 'write', {
+      path: 'src/config.ts',
+      content: 'export const key = process.env.AWS_KEY;\n',
+    });
+
+    expect(outcome.kind).toBe('executed');
+    expect(h.seen()).not.toBeUndefined();
+  });
+});
+
+describe('the edit.pre payload matches what the declared type promises', () => {
+  it('carries content and the raw arguments for a whole-file write', async () => {
+    const seen: JsonValue[] = [];
+    const h = harness([capturing('acme.audit', seen)], { toolName: 'write' });
+
+    await dispatch(h, 'write', { path: 'src/a.ts', content: 'hello\n' });
+
+    expect(seen).toHaveLength(1);
+    const payload = seen[0] as Record<string, JsonValue>;
+    expect(payload.content).toBe('hello\n');
+    expect(payload.wholeFile).toBe(true);
+    expect(payload.edits).toEqual([]);
+    // `arguments` was already on the wire and undeclared. It is declared now, so this
+    // asserts a promise rather than an accident.
+    expect(payload.arguments).toEqual({ path: 'src/a.ts', content: 'hello\n' });
+  });
+
+  it('omits content for a search/replace edit rather than sending null', async () => {
+    // A guest checking `content === undefined` should not also have to check for null.
+    const seen: JsonValue[] = [];
+    const h = harness([capturing('acme.audit', seen)], { toolName: 'edit' });
+
+    await dispatch(h, 'edit', { path: 'src/a.ts', edits: [{ search: 'a', replace: 'b' }] });
+
+    const payload = seen[0] as Record<string, JsonValue>;
+    expect('content' in payload).toBe(false);
+    expect(payload.wholeFile).toBe(false);
+    expect(payload.edits).toEqual([{ search: 'a', replace: 'b' }]);
   });
 });
 
