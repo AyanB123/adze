@@ -89,9 +89,31 @@ export async function resolveWithinRoots(
   if (lexical === undefined) return { path: absolute, within: false };
 
   const canonical = await canonicalize(absolute, fs);
-  const real = roots.find((root) => isWithin(root, canonical));
-  if (real === undefined) return { path: absolute, within: false };
-  return { path: absolute, within: true, root: real };
+  let matched = roots.find((root) => isWithin(root, canonical));
+
+  if (matched === undefined) {
+    // The root itself may be spelled with an alias the OS resolves away, in which
+    // case comparing a canonical candidate against a raw root fails and the
+    // workspace rejects itself. On Windows `%TEMP%` is commonly an 8.3 short path
+    // (`C:\Users\AYANBA~1\...`) that realpath expands; on macOS `/tmp` and `/var`
+    // are symlinks into `/private`. Both are the normal spelling of a scratch
+    // directory, so this was not an edge case: every read inside such a workspace
+    // was reported as outside it.
+    //
+    // Canonicalizing the roots is deferred to here rather than done up front
+    // because this is a per-tool-call hot path and the raw comparison succeeds
+    // whenever the caller already passed a resolved root.
+    const canonicalRoots = await Promise.all(
+      roots.map(async (root) => await canonicalize(resolve(root), fs)),
+    );
+    const index = canonicalRoots.findIndex((root) => isWithin(root, canonical));
+    // Report the caller's spelling, not ours: it is what they configured, and it is
+    // what a denial message or an approval prompt should name back to them.
+    if (index !== -1) matched = roots[index];
+  }
+
+  if (matched === undefined) return { path: absolute, within: false };
+  return { path: absolute, within: true, root: matched };
 }
 
 /** Canonical path of the nearest existing ancestor, with the rest reattached. */
