@@ -97,8 +97,17 @@ with caveat.
 
 ## Leakage assertions
 
-These run in CI as **build failures**. Each one blocks a specific documented way
-that agent benchmarks get gamed, including accidentally.
+Each one blocks a specific documented way that agent benchmarks get gamed,
+including accidentally. When a suite runs them, they run in CI as **build
+failures** — not as warnings, and not as a checklist item someone remembers.
+
+**None of them is implemented yet.** There is no container code anywhere in
+`bench/`, so nothing in this table is currently asserted by anything. They are the
+specification the harness must satisfy before a Tier-2 or Tier-3 number may be
+published, and they are recorded in the imperative because that is the constraint,
+not because the code exists. See M5 in [the roadmap](../roadmap.md). The Tier-1
+suite that does run, `apply-bench`, makes no model calls, opens no network
+connection, and starts no container, so none of these assertions applies to it.
 
 | Assertion | Blocks |
 | --- | --- |
@@ -109,8 +118,9 @@ that agent benchmarks get gamed, including accidentally.
 | Grading only on the committed diff, in a fresh container | Monkey-patching the test framework, dropping tests, forcing early exit |
 | Report names every task-defining test | Dropped tests appearing as passes |
 
-The two-container design is what makes most of these structural rather than
+The two-container design is what will make most of these structural rather than
 policed: the agent commits, and **only the diff crosses** into a clean verifier.
+That design is the reason the list is short, and it is also unbuilt.
 
 ---
 
@@ -175,3 +185,29 @@ audit.md             broken-task audit and leakage assertion output
 `report.md` leads with limitations, not with the headline number. If the number is
 bad, it gets published anyway — a benchmark policy that only produces favorable
 results is a marketing document, and we would rather have the credibility.
+
+That ordering is a property of the generator rather than of the author: the
+limitations section is index 0 in `renderReportMarkdown`, and a test compares its
+position against the first percentage in the output.
+
+### The gate a generated report passes through
+
+`checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be
+rendered without it. It refuses a report whose headline disagrees with the case
+results, one whose severe-failure list hides a case that applied when a refusal was
+required, one marked non-deterministic while reporting fewer than three attempts,
+one claiming model-derived inputs with no pinned model, and one that cannot cite its
+own run because the harness version or invocation is missing. `adze-bench` exits 3
+when any of those fire.
+
+A violating run is still written out in full. Trajectories for every trial are
+themselves required by this document, and destroying that evidence to hide a policy
+failure would be the worse outcome — so the violation is printed into `report.md`
+above every number instead, and the figure cannot be quoted from the artifact
+without it.
+
+Two rules here are **not** yet enforced by that gate: the three-point comparison
+rule needs a published baseline to compare against, and the max-over-N detector
+needs more than one attempt. A Tier-1 report has neither. Both are implemented and
+tested, and calling them on absent data would look like enforcement while being
+none.

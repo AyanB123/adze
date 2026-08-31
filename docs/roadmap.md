@@ -31,11 +31,11 @@ were run afterwards on the same tree.
 | `@adze/sdk` | Landed | typecheck clean · 63 tests · lint clean |
 | `apps/vscode` | Landed, **unpublished** | typecheck clean · 125 tests · lint clean |
 | `plugins/` (8 first-party) | Landed | 201 tests · lint clean |
-| `bench/harness` | Landed | 30 tests · lint clean |
+| `bench/harness` | Landed | 96 tests · lint clean |
 | `apps/ide` | **Empty** | no source; M4 has not started |
 | `apps/hub` | **Empty** | no source |
 
-1,909 tests pass, with zero lint errors and zero lint warnings across 338 files.
+1,975 tests pass, with zero lint errors and zero lint warnings across 342 files.
 Six tests are skipped, and both groups are conditional rather than broken: two in
 `@adze/retrieval` require tree-sitter grammar binaries, and four in
 `@adze/sandbox` are the real-containment tests, which need a host that actually
@@ -70,11 +70,12 @@ recorded here rather than left to be discovered.
 2. **No benchmark result has been published.** `apply-bench` runs and passes its
    50 cases, but that suite measures the applier against hand-written edits. It
    is not a measurement of any model, and its number is not a published result.
-   Nothing has been run against SWE-rebench or Terminal-Bench. The two
-   publication gates from the benchmark policy — no win claimed inside 3
-   percentage points, and default-deny on citation hosts — are implemented but
-   **not yet wired into the report generator**, so today they constrain a
-   maintainer who chooses to call them rather than one who forgets. See M5.
+   Nothing has been run against SWE-rebench or Terminal-Bench. Of the two
+   publication gates, the citation rule now runs on every generated report — a
+   report that cannot cite its own run, because its harness version or invocation
+   is missing, is refused. The three-point rule is implemented and tested but not
+   yet called, because a Tier-1 report carries no baseline to compare against; it
+   activates with the first report that has one. See M5.
 3. **No live end-to-end run has been verified against a real model.** The path
    from prompt through the turn machine to a provider HTTP request is exercised
    and its failure handling is verified, but nobody has yet watched
@@ -244,12 +245,12 @@ containerized has been built.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
-| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, and report rendering landed (30 tests). Harbor adapters are **not** built. |
+| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, report rendering, and the publication gate landed (96 tests). Harbor adapters are **not** built. |
 | Two-container isolation | ⬜ Not started | No container code exists anywhere in `bench/`. |
 | Leakage assertions | ⬜ Not started | Test-patch, gold-patch-field, future-history, and network-isolation assertions are **not implemented**, so they are not yet the build failures the policy requires. |
 | Tier 1 / 2 / 3 pipelines | 🚧 Tier 1 only | Tiers 2 and 3 need the container work above. |
 | Report format | 🚧 Partly landed | `report.md` genuinely emits limitations first, and that is reachable and tested: the limitations section is index 0, and a test compares its position against the first percentage in the rendered output. So it is a property of the generator rather than of the author. |
-| Publication gates | 🚧 **Written but unreachable** | The rules that matter most — no win claimed inside 3 percentage points, default-deny on citation hosts, and `mean ± SEM over ≥3 attempts` with fewer than three attempts returning `insufficient-attempts` — are implemented and correct in `publication.ts` and `statistics.ts`. Neither module is exported from `src/index.ts`, imported by the reporter, or covered by a test. Both are therefore *enforceable* rather than *enforced*, and Tier 1 does not exercise them because a deterministic pass/fail suite produces no pass@1 distribution to check. Wiring them is the prerequisite for any Tier-2 number. |
+| Publication gates | 🚧 Partly enforced | `checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be rendered without passing through it, and `adze-bench` exits 3 on a violation. A violating run is still written in full, because trajectories are required evidence and destroying them to hide a policy failure would be worse — the violation is printed into the report above every number instead. **Enforced:** report integrity (a headline that disagrees with the case outcomes; a severe-failure list that hides a case which applied when a refusal was required), the deterministic-versus-stochastic distinction (a non-deterministic suite reporting fewer than three attempts is refused), model-pin honesty, and that a report can cite its own run. **Not enforced:** the three-point comparison rule and the max-over-N detector — implemented and tested, but a Tier-1 report has no baseline and runs each case once, so calling them would evaluate absent data and look like enforcement while being none. They activate with the first report carrying a baseline or per-attempt rates. |
 | First public report | ⬜ Not started | Whatever the number is. Including if it is bad. |
 
 **Done when:** a stranger can re-run a published number from the artifacts alone.
