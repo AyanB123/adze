@@ -12,24 +12,37 @@
  *
  * ## Why this needs two events rather than one
  *
- * `edit.pre` is the semantically correct event and it is not sufficient. Its payload
- * carries `edits: [{ search, replace }]`, which is everything for the `edit` tool and
- * **nothing for the `write` tool**: `@adze/plugin-sdk`'s `readCoreWriteArgs` reports a
- * whole-file write as `{ path, edits: [], wholeFile: true }`, so the content being
- * written is not in the declared payload at all. A guard that only registered
- * `edit.pre` would refuse a credential added by `edit` and wave through the same
- * credential written by `write` — which is the worse of the two, because `write`
- * replaces the whole file.
+ * `edit.pre` is the semantically correct event and it is now sufficient for anything
+ * that reaches a file. Its payload carries `content` — the bytes a whole-file write
+ * would leave on disk — alongside `edits`, so one handler covers all three shapes an
+ * edit arrives in: a search/replace block, a whole-file `write`, and an `edit` carrying
+ * a whole-file `replacement`. That is where the credential check for file content now
+ * lives, and it reads only tool-agnostic fields, so this plugin no longer has to know
+ * which tool produced the edit.
  *
- * So the credential check for whole-file writes runs on `tool.pre`, where
- * `arguments` is a declared field and `arguments.content` is the actual bytes. The
- * same handler covers `bash`, because `echo <key> > .env` and
- * `curl -H 'Authorization: Bearer <key>'` leak a credential into the shell history
- * and into the trajectory log without touching an edit tool at all.
+ * It did not used to carry `content`. The payload reported a whole-file write as
+ * `{ path, edits: [], wholeFile: true }`, so a guard inspecting `edits[].replace` had
+ * nothing to inspect and allowed the write — and this plugin worked around that by
+ * checking `arguments.content` on `tool.pre` when the tool was named `write`. That
+ * workaround had a hole of its own, which is worth recording because it is the exact
+ * failure the coupling causes: it keyed on the name `write`, so a credential passed as
+ * `edit`'s whole-file `replacement` was seen by neither handler and was written. Any
+ * policy that has to enumerate tool names will eventually miss one.
  *
- * The `edit.pre` handler keeps the two things only it can do: the search/replace
- * blocks, and the CI-review rule, which needs `approvedByHuman` — a field the
- * `tool.pre` payload does not have.
+ * `tool.pre` is still registered, for one thing `edit.pre` cannot cover and one it can.
+ *
+ * Cannot: `bash`. `echo <key> > .env` and
+ * `curl -H 'Authorization: Bearer <key>'` leak a credential into the shell history and
+ * into the trajectory log without touching an edit tool at all, so no edit event fires.
+ *
+ * Can: whole-file writes, which are checked on both events deliberately. The `tool.pre`
+ * check is redundant under the default edit-tool mapping and is kept as a backstop,
+ * because a host can remap which tools derive `edit.pre` and for a credential guard a
+ * redundant denial costs nothing while a missed one costs everything. It is a second
+ * lock on the same door rather than the only key, which is what it used to be.
+ *
+ * The CI-review rule stays on `edit.pre` alone, because it needs `approvedByHuman` — a
+ * field the `tool.pre` payload does not have.
  *
  * ## The patterns are prefix-anchored and length-checked on purpose
  *
@@ -127,7 +140,7 @@ function isCiPath(path) {
 }
 
 /**
- * `edit.pre`: the search/replace blocks, and the CI-review rule.
+ * `edit.pre`: file content in every shape it arrives in, and the CI-review rule.
  *
  * The CI check runs before the credential check. Both are denials, so the order
  * cannot change the outcome, but it does change which reason the model is told — and
@@ -156,13 +169,25 @@ function editPre(input) {
     if (label !== undefined) return { kind: 'deny', reason: credentialDenial(label, `'${path}'`) };
   }
 
+  // Whole-file bytes, present when the call replaces the entire file — a `write`, or an
+  // `edit` carrying a `replacement`. Checked through the payload rather than through
+  // `arguments`, so this rule does not depend on what the tool is called.
+  const wholeFile = findCredential(input.content);
+  if (wholeFile !== undefined) {
+    return { kind: 'deny', reason: credentialDenial(wholeFile, `'${path}'`) };
+  }
+
   return { kind: 'allow' };
 }
 
 /**
- * `tool.pre`: whole-file writes and shell commands.
+ * `tool.pre`: shell commands, and a second look at whole-file writes.
  *
- * This is the half `edit.pre` structurally cannot cover. See the file header.
+ * `bash` is the part no edit event covers, because a leaked credential in a shell
+ * command never touches an edit tool. The `write` branch is a backstop for the check
+ * `edit.pre` already performs: it is redundant under the default edit-tool mapping, and
+ * it is kept because a host can remap which tools derive `edit.pre`, and a credential
+ * guard should fail to allow rather than fail to deny. See the file header.
  */
 function toolPre(input) {
   const args = input.arguments ?? {};

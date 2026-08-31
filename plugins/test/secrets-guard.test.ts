@@ -109,10 +109,13 @@ describe('a credential in a search/replace edit is denied', () => {
 });
 
 describe('a credential in a whole-file write is denied', () => {
-  it('is caught on tool.pre, which is the only event that can see it', async () => {
-    // The gap this plugin exists to work around: `edit.pre`'s payload reports a
-    // whole-file write as `edits: []`, so the content is not there. If this ever
-    // starts passing through, a `write` has become a way to bypass the guard.
+  it('is denied, and denied by content rather than by a tool name', async () => {
+    // Both registered events cover this now: `edit.pre` carries `content`, and the
+    // `tool.pre` write branch remains as a backstop. This asserts the outcome, which is
+    // all a harness running both hooks can prove. That `edit.pre` *alone* is sufficient
+    // is established in packages/plugin-sdk/test/dispatch-deny.test.ts, by a guard that
+    // reads only the tool-agnostic payload fields. If this ever starts passing through,
+    // a `write` has become a way to bypass the guard.
     const h = harness(plugin);
     const outcome = await dispatch(h, 'write', {
       path: '.env',
@@ -134,6 +137,26 @@ describe('a credential in a whole-file write is denied', () => {
     expect(outcome.kind).toBe('denied');
     if (outcome.kind !== 'denied') return;
     expect(outcome.reason).toContain('config/production.json');
+  });
+
+  it('denies one passed as a whole-file replacement to edit', async () => {
+    // The third way bytes reach disk, and the one that was getting through. `edit`
+    // accepts a whole-file `replacement` for the applier's second tier: `editPre` saw
+    // an empty `edits` array and `toolPre` only inspected `arguments.content` when the
+    // tool was named `write`, so neither handler looked at the replacement and the
+    // credential was written. Identical bytes must get an identical verdict regardless
+    // of which tool carried them.
+    const h = harness(plugin);
+    const outcome = await dispatch(h, 'edit', {
+      path: 'src/config.ts',
+      replacement: `export const key = '${fakeCredential('sk-', 40)}';\n`,
+    });
+
+    expect(outcome.kind).toBe('denied');
+    if (outcome.kind !== 'denied') return;
+    expect(outcome.source).toBe('hook');
+    expect(outcome.reason).toContain('src/config.ts');
+    expect(h.seen()).toBeUndefined();
   });
 });
 
