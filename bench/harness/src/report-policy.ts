@@ -39,6 +39,29 @@
  * would produce the appearance of enforcement without the substance, which is the
  * failure this package has already had to correct once. They activate when a report
  * shape that carries a baseline or per-attempt rates exists.
+ *
+ * ## Why there is no leakage rule here
+ *
+ * The tempting shape is to refuse a report whose `inputSource` is not `synthetic`
+ * unless it carries leakage-audit evidence, so that a future Tier-2 run cannot omit
+ * it. It was considered and rejected for two reasons.
+ *
+ * It would need a new `BenchReport` field, and the second paragraph of this file is
+ * that the rules must not know about `BenchReport` because a Tier-2 report will have
+ * a different shape. The field would therefore be added to the Tier-1 shape in order
+ * to guard a condition only a shape that does not exist yet can reach — speculative
+ * schema for an absent tier.
+ *
+ * It would also be the weakest rule in the gate. Every rule here compares two things
+ * present in the same artifact: `totals` against `results`, `severeFailures` against
+ * `results`, `inputSource` against `models`. That is what makes them checks rather
+ * than assertions of good intent. A leakage field would carry a claim with nothing
+ * beside it to check the claim against, which is precisely the review-checklist item
+ * this file exists to replace.
+ *
+ * The assertions themselves live in `leakage.ts`, which records why nothing calls
+ * them yet and what each one waits for. Every generated `audit.md` restates it per
+ * run, which puts the gap in the artifact without pretending a check ran.
  */
 
 import { type Citation, checkCitation } from './publication.js';

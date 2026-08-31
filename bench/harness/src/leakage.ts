@@ -23,6 +23,37 @@
  * without having tested a container would be the appearance of enforcement rather than
  * enforcement. They are named in `docs/benchmarks/strategy.md` as unimplemented.
  *
+ * ## Nothing calls these yet, and what each one is waiting for
+ *
+ * `runner.ts` does not import this file. That is a decision, not an oversight at the
+ * wiring seam, and it is recorded here because a reader auditing whether the leakage
+ * policy is enforced will arrive at this file first.
+ *
+ * Both functions assert over inputs the only committed suite does not have.
+ * `checkPromptLeakage` needs a dataset record and the payload assembled from it;
+ * `checkHistoryIsolation` needs a prepared repository and the base commit it is supposed
+ * to sit at. `apply-bench` has none of the four: hand-written edits applied to strings in
+ * memory, with no task record, no prompt and no checkout.
+ *
+ * Calling them anyway would evaluate absent data. An empty payload trips no field guard,
+ * and a record with no `patch` field leaks no patch lines, so the result would be `ok` on
+ * every run — the appearance of enforcement without the substance. That is the mistake
+ * this package has already had to correct twice: once for source comments citing callers
+ * that were never written, and once in `report-policy.ts`, which declines to call
+ * `compareToBaseline` on absent data and says so at the same length.
+ *
+ * So these are asserted rather than invoked. `test/leakage.test.ts` exercises both
+ * against fixtures — a SWE-bench-shaped record, and real git repositories built per case,
+ * both leaking and correctly prepared — and a regression fails the build. What that buys
+ * is confidence that the assertions work on the day an adapter first has data for them.
+ * It buys no claim at all about a run, and no report may state otherwise; each generated
+ * `audit.md` records the same thing per run, so the gap is visible in the artifact rather
+ * than only in a document.
+ *
+ * The wiring belongs in the first adapter that prepares a task from a dataset, at the
+ * moment the payload is built and before it is handed over — not in `runSuite`, which
+ * will never be the code that assembles a prompt. See M5 in `docs/roadmap.md`.
+ *
  * ## Why the field guard is an allowlist
  *
  * The obvious construction is a denylist: refuse `patch`, refuse `test_patch`, refuse

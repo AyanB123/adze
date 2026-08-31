@@ -120,7 +120,7 @@ history row.
 | Grading only on the committed diff, in a fresh container | Not implemented | Monkey-patching the test framework, dropping tests, forcing early exit |
 | Report names every task-defining test | Not implemented | Dropped tests appearing as passes |
 
-The three asserted rows are enforced by `checkPromptLeakage` and
+The three asserted rows are covered by `checkPromptLeakage` and
 `checkHistoryIsolation` in `bench/harness/src/leakage.ts`. The field guard is
 **default-deny**: only `instance_id`, `repo`, `base_commit` and `problem_statement`
 may reach an agent, so a dataset that adds a solution-bearing column is refused
@@ -134,6 +134,23 @@ reachable from any ref, rather than checking commit dates, because a leftover ta
 sibling branch carrying the fix is exactly as reachable as a descendant. A pass
 proves the fix cannot be found by walking refs; it does not prove the object database
 holds no unreachable future objects.
+
+**What "Asserted" means here, and what it does not.** Both functions are asserted by
+unit tests over fixtures: a SWE-bench-shaped record for the two payload rows, and
+real git repositories built per test — both leaking and correctly prepared — for the
+history row. A regression in either fails the build on all three operating systems.
+What no benchmark run does is pass its own data through them. `runner.ts` does not
+import `leakage.ts`, because the only committed suite has no dataset record, no
+assembled payload and no prepared repository to pass, and calling them on absent data
+would return clean on every run — enforcement in appearance and nothing in substance.
+So these three rows are a guarantee about the checks and not yet a guarantee about a
+run, and no report may imply otherwise. Every generated `audit.md` restates it per
+run, so the gap is visible in the artifact rather than only here.
+
+**It is blocked on input rather than on effort.** `checkPromptLeakage` begins to
+apply with the first adapter that loads a task record and assembles a payload from it;
+`checkHistoryIsolation` begins to apply with the first prepared agent repository.
+Both arrive with Harbor and a dataset — M5.
 
 The two-container design is what will make most of the remaining rows structural
 rather than policed: the agent commits, and **only the diff crosses** into a clean
@@ -211,6 +228,16 @@ That ordering is a property of the generator rather than of the author: the
 limitations section is index 0 in `renderReportMarkdown`, and a test compares its
 position against the first percentage in the output.
 
+All five files are written on every run, `audit.md` included. For a suite whose cases
+are hand-written and which starts no container, most of what an audit asks for does
+not apply, so `audit.md` says which parts and why — an absent audit and one recording
+a genuine exemption read identically unless the exemption is stated. It also carries
+the part that is real: the case count, the refusal reasons the run exercised, which
+validator levels actually ran and which did not, and the severe-failure count.
+Applicability is derived from the report's own `inputSource`, so a report that is not
+synthetic gets the two sections as obligations rather than inheriting a hand-written
+suite's exemption.
+
 ### The gate a generated report passes through
 
 `checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be
@@ -232,3 +259,12 @@ rule needs a published baseline to compare against, and the max-over-N detector
 needs more than one attempt. A Tier-1 report has neither. Both are implemented and
 tested, and calling them on absent data would look like enforcement while being
 none.
+
+The gate carries no leakage rule either, and that was a decision rather than an
+omission. Requiring leakage-audit evidence whenever `inputSource` is not `synthetic`
+would need a new field on a report shape that a Tier-2 report will not share, and
+every other rule in the gate compares two things present in the same artifact — a
+leakage field would carry a claim with nothing beside it to check the claim against,
+which is the review-checklist the gate exists to replace. The reasoning is recorded in
+`report-policy.ts`; the assertions' own status is in `leakage.ts` and in each
+generated `audit.md`.
