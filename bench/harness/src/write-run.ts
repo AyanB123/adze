@@ -7,6 +7,12 @@
  *   result.json     machine-readable, schema in src/report-schema.ts
  *   config.json     harness version, invocation, environment
  *   trajectories/   every trial, pass and fail
+ *   audit.md        broken-task audit and leakage assertion output
+ *
+ * All five are written on every run, `audit.md` included. For `apply-bench` its
+ * content is mostly a statement of what does not apply and why, which is the point:
+ * an absent `audit.md` and one that records a genuine exemption are indistinguishable
+ * unless the exemption is written down. See `audit.ts`.
  *
  * The default destination is `bench/.runs/`, which `.gitignore` excludes: a run on
  * every pull request is an artifact, not a commit. A report that is meant to be
@@ -16,6 +22,7 @@
 
 import { mkdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { renderAuditMarkdown } from './audit.js';
 import { renderReportMarkdown } from './report.js';
 import type { RunOutcome } from './runner.js';
 
@@ -33,6 +40,7 @@ export interface WrittenRun {
   readonly dir: string;
   readonly reportPath: string;
   readonly resultPath: string;
+  readonly auditPath: string;
   readonly trajectoryCount: number;
 }
 
@@ -42,9 +50,11 @@ export async function writeRun(outcome: RunOutcome, dir: string): Promise<Writte
 
   const reportPath = join(dir, 'report.md');
   const resultPath = join(dir, 'result.json');
+  const auditPath = join(dir, 'audit.md');
 
   await writeFile(reportPath, renderReportMarkdown(outcome.report), 'utf8');
   await writeFile(resultPath, `${JSON.stringify(outcome.report, null, 2)}\n`, 'utf8');
+  await writeFile(auditPath, renderAuditMarkdown(outcome.report), 'utf8');
 
   await writeFile(
     join(dir, 'config.json'),
@@ -102,6 +112,7 @@ export async function writeRun(outcome: RunOutcome, dir: string): Promise<Writte
     dir,
     reportPath,
     resultPath,
+    auditPath,
     trajectoryCount: outcome.trajectories.length,
   };
 }

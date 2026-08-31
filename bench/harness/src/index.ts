@@ -20,6 +20,7 @@
  * can reach is a rule nobody is following.
  */
 
+export { renderAuditMarkdown } from './audit.js';
 export type {
   BenchCase,
   CaseExpectation,

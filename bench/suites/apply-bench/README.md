@@ -120,11 +120,22 @@ report.md       human-readable, limitations first
 result.json     machine-readable, schema in bench/harness/src/report-schema.ts
 config.json     harness version, invocation, environment
 trajectories/   one file per case, inputs and outputs, failures included
+audit.md        broken-task audit and leakage assertion output
 ```
 
 Trajectories are written for **every** case, passing or failing. Publishing
 failures is the strongest available credibility signal, and a report that contains
 only passes is not checkable.
+
+`audit.md` is mostly a record of what does not apply to this suite, and that is its
+purpose. The cases are hand-written here, so there is no borrowed task set to audit
+for broken tasks; the suite starts no container, opens no network connection and
+hands the applier no repository, so none of the six leakage assertions has an input
+to check. Each exemption is stated with its reason, because an `audit.md` recording
+a genuine exemption and one nobody wrote are indistinguishable otherwise. What it
+does report is the part that is real: case count, the refusal reasons the run
+exercised, which validator levels actually ran and which did not, and the
+severe-failure count.
 
 ## Reading the report
 

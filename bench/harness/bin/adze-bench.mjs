@@ -199,6 +199,7 @@ if (args.json) {
   if (written !== undefined) {
     process.stdout.write(`\nreport   ${written.reportPath}\n`);
     process.stdout.write(`result   ${written.resultPath}\n`);
+    process.stdout.write(`audit    ${written.auditPath}\n`);
     process.stdout.write(
       `trials   ${written.trajectoryCount} trajectory file(s), failures included\n`,
     );
