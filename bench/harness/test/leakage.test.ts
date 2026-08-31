@@ -9,6 +9,15 @@
  *
  * They need `git` on PATH, which every CI runner for this repository has, and they create
  * nothing outside a temp directory.
+ *
+ * ## Why they carry an explicit timeout
+ *
+ * Each git-backed case builds a five-commit repository and then clones it — on the order
+ * of a dozen `git` subprocesses per test. Vitest's five-second default is sized for
+ * pure-function tests, and on Windows under load these exceed it, failing as timeouts
+ * with a set of victims that changes from run to run. Raising the budget weakens no
+ * assertion: a check that fails still fails, and the alternative is a suite that goes red
+ * on a busy runner for reasons that have nothing to do with leakage.
  */
 
 import { execFile } from 'node:child_process';
@@ -265,7 +274,10 @@ async function preparedAt(source: string, baseCommit: string): Promise<string> {
   return dir;
 }
 
-describe('future history', () => {
+/** See the note at the top of this file: a dozen `git` subprocesses does not fit 5s. */
+const GIT_FIXTURE_TIMEOUT_MS = 30_000;
+
+describe('future history', { timeout: GIT_FIXTURE_TIMEOUT_MS }, () => {
   it('refuses a clone that still has later commits reachable', async () => {
     // The realistic mistake: check out the base commit and forget that `main` and the
     // remote-tracking refs still point at the fix.
