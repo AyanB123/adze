@@ -35,6 +35,7 @@ import {
   resolveConfig,
 } from '@adze/providers';
 import { EXIT, type ExitCode, field, type Io, type Style, styleFor, writeJson } from '../output.js';
+import { resolveShellPrefix, SHELL_PROGRAM_ENV, shellOverrideAdvice } from '../shell.js';
 import { CLI_VERSION, MINIMUM_NODE_VERSION } from '../version.js';
 
 const execFileAsync = promisify(execFile);
@@ -188,8 +189,16 @@ function findRipgrep(): { value: string; ok: boolean } {
   };
 }
 
-/** The argv prefix `@adze/core` gives the `bash` tool, on every platform. */
-const SHELL_PREFIX: readonly [string, string] = ['bash', '-lc'];
+/**
+ * The argv prefix the `bash` tool will actually use, including any override.
+ *
+ * Read from the environment rather than hard-coded, so this probes the shell the agent
+ * is going to run. Probing `bash` while `run` used something else would make the
+ * diagnostic worse than silence: it would report a healthy shell nobody uses, or a
+ * broken one that had already been worked around.
+ */
+const SHELL = resolveShellPrefix(process.env);
+const SHELL_PREFIX: readonly [string, string] = SHELL.prefix;
 
 /** Outcome of actually running the shell, as opposed to finding it. */
 export interface ShellCheck {
@@ -468,7 +477,11 @@ async function buildChecks(section: ProviderSection, shell: ShellCheck): Promise
               shell.detail === undefined
                 ? 'Install bash (Git for Windows ships one).'
                 : `The shell reported: ${shell.detail}`
-            } On Windows, \`bash\` on PATH is often WSL's launcher, which fails this way when no healthy distribution is installed - Git for Windows' bash is the usual fix. Until then the agent can still read, edit, glob, grep and use symbols, but every command it tries will fail.`,
+            } ${
+              SHELL.overridden
+                ? `This shell came from ${SHELL_PROGRAM_ENV}, so the override is what needs correcting rather than PATH.`
+                : `On Windows, \`bash\` on PATH is often WSL's launcher, which fails this way when no healthy distribution is installed. ${shellOverrideAdvice()}`
+            } Until then the agent can still read, edit, glob, grep and use symbols, but every command it tries will fail.`,
           }),
     },
     {

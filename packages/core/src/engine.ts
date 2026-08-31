@@ -70,6 +70,7 @@ import { ToolRegistry } from './registry.js';
 import type { SearchBackend } from './retrieval.js';
 import { InMemorySessionStore, Session, type SessionStore } from './session.js';
 import { builtinTools } from './tools/index.js';
+import type { BashToolOptions } from './tools/shell.js';
 import { ContinuationStore } from './truncate.js';
 import { runTurn, type TurnOutcome } from './turn.js';
 import type {
@@ -100,6 +101,16 @@ export interface EngineOptions {
   readonly requestApproval?: ApprovalRequester;
   /** Extra tools beyond the built-ins. Plugins arrive this way. */
   readonly extraTools?: readonly RegisteredTool[];
+  /**
+   * Options for the built-in `bash` tool.
+   *
+   * Exposed so a surface can point the shell somewhere other than whatever `bash`
+   * resolves to on `PATH`. On Windows that is frequently WSL's launcher, which exists
+   * whether or not a healthy distribution sits behind it and fails every command when
+   * one does not — a state `adze doctor` detects and, until this existed, could only
+   * advise the user to fix by editing `PATH`.
+   */
+  readonly bash?: BashToolOptions;
   readonly limits?: ToolLimits;
   readonly nextId?: IdFactory;
   /** Defaults to `process.platform`. Injectable so both branches are testable. */
@@ -149,7 +160,13 @@ export class Engine {
     for (const hook of options.hooks ?? []) this.hooks.register(hook);
     this.engineInfo = options.engineInfo ?? { name: '@adze/core', version: '0.0.1' };
     this.defaultModel = options.defaultModel ?? { provider: 'unset', model: 'unset' };
-    this.baseTools = [...builtinTools({ nextId: this.nextId }), ...(options.extraTools ?? [])];
+    this.baseTools = [
+      ...builtinTools({
+        nextId: this.nextId,
+        ...(options.bash === undefined ? {} : { bash: options.bash }),
+      }),
+      ...(options.extraTools ?? []),
+    ];
   }
 
   registerHook(hook: RegisteredHook): Disposable {

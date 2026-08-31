@@ -300,6 +300,42 @@ so the two commands cannot drift. A `--sandbox` value one accepted and the other
 silently ignored would be a security display that is wrong in one of two places, with
 no way for you to tell which.
 
+## The shell the agent uses
+
+The `bash` tool runs `bash -lc <command>`, resolving `bash` on `PATH`. Two
+environment variables override that:
+
+| Variable | Meaning | Default |
+| --- | --- | --- |
+| `ADZE_SHELL` | Program to run commands with. Taken **verbatim**, so a path containing spaces needs no quoting. | `bash` |
+| `ADZE_SHELL_FLAG` | Flag that makes the program take a command string. | `-lc` |
+
+```powershell
+# Windows: point at Git for Windows' bash rather than WSL's launcher
+$env:ADZE_SHELL = 'C:\Program Files\Git\bin\bash.exe'
+```
+
+This exists for one specific and common failure. On Windows, `bash` on `PATH` is
+frequently WSL's launcher, which is present whether or not a healthy distribution
+sits behind it and exits non-zero for **every** command when one does not. The agent
+can still read, edit, glob, grep and use symbols in that state, but every command it
+tries fails — so a task that needs to run a test cannot finish.
+
+`adze doctor` probes the shell the agent will actually use, including the override,
+and reports which one it came from:
+
+```
+warn shell      not found
+     The `bash` tool runs `C:\wrong\path.exe -lc <command>` and cannot work until
+     this does. This shell came from ADZE_SHELL, so the override is what needs
+     correcting rather than PATH.
+```
+
+Two variables rather than one command string is deliberate: splitting
+`ADZE_SHELL="C:\Program Files\Git\bin\bash.exe -lc"` on whitespace would break on
+exactly the path this feature exists to support. An empty value is treated as unset,
+because `ADZE_SHELL=` in a dotenv file is how a variable gets cleared.
+
 ## The configuration file
 
 Adze reads provider configuration from `.adze/providers.json`, in two locations,

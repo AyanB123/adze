@@ -32,6 +32,7 @@ import {
   type ResolvedConfig,
   type ResolveOptions,
 } from '@adze/providers';
+import { resolveShellPrefix } from '../shell.js';
 import { CLI_VERSION } from '../version.js';
 import type { ApprovalChannel } from './approval.js';
 import { RetrievalSearchBackend } from './search.js';
@@ -125,6 +126,10 @@ export function buildAgent(options: AgentOptions): AgentSetup {
     // agent falls back to `bash grep` — one approval prompt per search, and raw stdout
     // for the model to scrape instead of ranked structured hits.
     search: options.search ?? new RetrievalSearchBackend({ root: options.workspaceRoot }),
+    // `bash` on PATH is WSL's launcher on many Windows machines, and a broken WSL fails
+    // every command the agent runs. `doctor` could detect that and only advise editing
+    // PATH; ADZE_SHELL makes that advice actionable.
+    bash: { shellPrefix: resolveShellPrefix(process.env).prefix },
     sink: options.sink,
     engineInfo: { name: '@adze/cli', version: CLI_VERSION },
     requestApproval: options.approvalChannel.request,
