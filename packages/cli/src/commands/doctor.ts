@@ -8,6 +8,14 @@
  * platform, on the condition that we say so instead of letting a user infer
  * protection that is not there. This command is where we say it.
  *
+ * Every sandbox claim below is read from the {@link ContainmentPlan} that `run` and
+ * `chat` will hand the permission gate, built by the same call with the same defaults.
+ * It was previously derived from `sandboxEnforcement(process.platform, mode)`, which
+ * answers a question about the platform rather than about this code — so it reported
+ * `os-level` on macOS and Linux for as long as nothing wired a broker, which was the
+ * whole time. A second opinion about containment is how a security display ends up
+ * disagreeing with the boundary in force.
+ *
  * The model-provider section is here for a plainer reason: this command is what
  * `@adze/providers` and `adze run` both tell the user to run, and it used to report
  * nothing whatsoever about providers — so a machine with no credential passed
@@ -21,19 +29,20 @@ import { accessSync, constants } from 'node:fs';
 import { createRequire } from 'node:module';
 import { delimiter, join } from 'node:path';
 import { promisify } from 'node:util';
-import {
-  DEFAULT_APPROVAL_POLICY,
-  DEFAULT_SANDBOX_MODE,
-  PROTOCOL_VERSION,
-  type SandboxEnforcement,
-  sandboxEnforcement,
-} from '@adze/protocol';
+import { DEFAULT_APPROVAL_POLICY, DEFAULT_SANDBOX_MODE, PROTOCOL_VERSION } from '@adze/protocol';
 import {
   type ResolvedConfig,
   type ResolvedProvider,
   type ResolveOptions,
   resolveConfig,
 } from '@adze/providers';
+import type { ContainmentPlan, HostProbe } from '@adze/sandbox';
+import {
+  containmentJson,
+  createCliSandbox,
+  mechanismName,
+  orderedDegradations,
+} from '../agent/sandbox.js';
 import { EXIT, type ExitCode, field, type Io, type Style, styleFor, writeJson } from '../output.js';
 import { resolveShellPrefix, SHELL_PROGRAM_ENV, shellOverrideAdvice } from '../shell.js';
 import { CLI_VERSION, MINIMUM_NODE_VERSION } from '../version.js';
@@ -59,6 +68,15 @@ export interface DoctorOptions {
      * the condition being tested, and therefore the one thing a test must not inherit.
      */
     readonly probeShell?: () => Promise<ShellCheck>;
+    /**
+     * Replaces the host the sandbox is selected for.
+     *
+     * The sandbox paragraph is the part of this command that must be right on every
+     * platform, and three of its four branches are unreachable from any single machine.
+     * With a fake host, the Windows report is asserted on Linux and the Seatbelt report
+     * on Windows — which is where they will actually be reviewed.
+     */
+    readonly probe?: HostProbe;
   };
 }
 
@@ -509,40 +527,109 @@ async function buildChecks(section: ProviderSection, shell: ShellCheck): Promise
  * Extracted because it is the part of `doctor` that must not be edited casually:
  * ADR-0007 accepts shipping without Windows containment only on the condition that
  * we state it plainly, and the wording below is that condition.
+ *
+ * Every claim here comes from the {@link ContainmentPlan} the CLI will actually hand the
+ * permission gate. It used to come from `sandboxEnforcement(process.platform, mode)`,
+ * which answers a question about the *platform* rather than about the code: it said
+ * `os-level` on macOS and Linux whether or not anything wired a mechanism, and for as
+ * long as nothing did, this command reported containment that did not exist. The plan
+ * cannot make that mistake — it is built by the broker that will run the command, and it
+ * cannot report `os-level` while admitting a containment gap.
+ *
+ * `platform` is passed rather than read from `process`, so the Windows wording is
+ * reachable from a test on any host.
  */
-function renderSandbox(enforcement: SandboxEnforcement, io: Io): void {
+function renderSandbox(plan: ContainmentPlan, platform: string, io: Io): void {
   const s = styleFor(false);
   io.out(`${s.bold('Sandbox')}\n`);
   io.out(`${field('default mode', DEFAULT_SANDBOX_MODE)}\n`);
   io.out(`${field('default approvals', DEFAULT_APPROVAL_POLICY)}\n`);
+  io.out(`${field('mechanism', mechanismName(plan.mechanism))}\n`);
+  io.out(`${field('OS containment', enforcementLabel(plan, s))}\n`);
+  io.out(`${field('network', networkLabel(plan, s))}\n`);
 
-  if (enforcement === 'os-level') {
-    const mechanism = process.platform === 'darwin' ? 'Seatbelt' : 'bubblewrap';
-    io.out(`${field('OS containment', `${s.good('available')} (${mechanism})`)}\n`);
+  renderDegradations(plan, io, s);
+
+  if (plan.enforcement === 'os-level') {
     io.out(
-      `\n  ${s.dim('Tool calls pass the permission gate and run inside an OS-level sandbox.')}\n`,
+      `\n  ${s.dim('Tool calls pass the permission gate and then run inside an OS-level')}\n` +
+        `  ${s.dim('boundary: writes outside the writable roots and network access are denied')}\n` +
+        `  ${s.dim('for the command and every descendant. The syscall surface is not')}\n` +
+        `  ${s.dim('restricted — see the gaps above.')}\n`,
     );
     return;
   }
 
-  if (enforcement === 'not-applicable') {
-    io.out(`${field('OS containment', s.warn('not applicable (full-access)'))}\n`);
+  if (plan.enforcement === 'not-applicable') {
+    io.out(
+      `\n  ${s.warn('full-access was requested, so no containment was asked for.')} Every tool\n` +
+        '  call still passes the permission gate.\n',
+    );
     return;
   }
 
   // Deliberately explicit about what is and is not protecting the user. "sandbox:
   // partial" would be read as "some protection", when the correct reading is that
   // there is no kernel-level boundary at all.
-  io.out(`${field('OS containment', s.bad('none on this platform'))}\n`);
+  if (platform === 'win32') {
+    io.out(
+      `\n  ${s.warn('There is no OS-level sandbox on Windows.')} The permission gate and the\n` +
+        '  approval policy still apply, and every tool call still passes through them —\n' +
+        '  but nothing stops an approved command from touching the filesystem outside\n' +
+        '  the workspace. Treat an approval here as you would treat running the command\n' +
+        '  yourself.\n\n' +
+        `  ${s.dim('This is a gap across the whole open-source agent ecosystem, not only Adze.')}\n` +
+        `  ${s.dim('Closing it is roadmapped: docs/architecture/adr/0007-sandbox-and-permissions.md')}\n`,
+    );
+    return;
+  }
+
+  // A mechanism exists for this platform and is not usable on this host. The gaps above
+  // carry the specific reason — a missing binary, or a sysctl — which is the difference
+  // between an actionable report and "no containment".
   io.out(
-    `\n  ${s.warn('There is no OS-level sandbox on Windows.')} The permission gate and the\n` +
-      '  approval policy still apply, and every tool call still passes through them —\n' +
-      '  but nothing stops an approved command from touching the filesystem outside\n' +
-      '  the workspace. Treat an approval here as you would treat running the command\n' +
-      '  yourself.\n\n' +
-      `  ${s.dim('This is a gap across the whole open-source agent ecosystem, not only Adze.')}\n` +
-      `  ${s.dim('Closing it is roadmapped: docs/architecture/adr/0007-sandbox-and-permissions.md')}\n`,
+    `\n  ${s.warn('No OS-level containment is available on this host.')} The permission gate\n` +
+      '  and the approval policy still apply, and every tool call still passes through\n' +
+      '  them — but nothing stops an approved command from touching the filesystem\n' +
+      '  outside the workspace. Treat an approval here as you would treat running the\n' +
+      '  command yourself. The reason is listed above; it is usually fixable.\n\n' +
+      `  ${s.dim('The position, and what closes it: docs/architecture/adr/0007-sandbox-and-permissions.md')}\n`,
   );
+}
+
+function enforcementLabel(plan: ContainmentPlan, s: Style): string {
+  switch (plan.enforcement) {
+    case 'os-level':
+      return `${s.good('os-level')} (${mechanismName(plan.mechanism)})`;
+    case 'not-applicable':
+      return s.warn('not applicable (full-access)');
+    default:
+      return `${s.bad('gate-only')} — no OS-level containment on this host`;
+  }
+}
+
+function networkLabel(plan: ContainmentPlan, s: Style): string {
+  const hosts = plan.network.hosts.length > 0 ? ` (${plan.network.hosts.join(', ')})` : '';
+  if (!plan.network.enforced) return `${s.bad(plan.network.policy)}${hosts} — not enforced`;
+  return `${s.good(plan.network.policy)}${hosts}`;
+}
+
+/**
+ * Everything the plan will not enforce, in full, worst first.
+ *
+ * Printed rather than counted. `plan.degradations` is the machine-readable answer to
+ * "what did I ask for that I am not getting", and a `doctor` that summarised it would be
+ * the one place a user goes for the specifics and does not find them. Windows lists five,
+ * each naming a different missing mechanism and a different piece of work.
+ */
+function renderDegradations(plan: ContainmentPlan, io: Io, s: Style): void {
+  const gaps = orderedDegradations(plan);
+  if (gaps.length === 0) return;
+  io.out(`\n  ${s.bold('Not enforced')} ${s.dim(`(${gaps.length})`)}\n`);
+  for (const gap of gaps) {
+    const mark = gap.scope === 'containment' ? s.bad('gap ') : s.warn('note');
+    io.out(`  ${mark} [${gap.code}] ${gap.message}\n`);
+  }
 }
 
 export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCode> {
@@ -551,7 +638,17 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   const section = buildProviderSection(options);
   const shell = await (options.__testHooks?.probeShell ?? probeShell)();
   const checks = await buildChecks(section, shell);
-  const enforcement = sandboxEnforcement(process.platform, DEFAULT_SANDBOX_MODE);
+  const probe = options.__testHooks?.probe;
+  // The same call `run` and `chat` make, with the same defaults, so this command reports
+  // the boundary a user is actually about to get rather than a second opinion about it.
+  const { plan } = await createCliSandbox({
+    mode: DEFAULT_SANDBOX_MODE,
+    writableRoots: [process.cwd()],
+    approvals: DEFAULT_APPROVAL_POLICY,
+    commandRules: [],
+    ...(probe === undefined ? {} : { probe }),
+  });
+  const platform = probe?.platform ?? process.platform;
   const failed = checks.filter((c) => c.required && !c.ok);
 
   if (json) {
@@ -588,8 +685,10 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
       sandbox: {
         defaultMode: DEFAULT_SANDBOX_MODE,
         defaultApprovalPolicy: DEFAULT_APPROVAL_POLICY,
-        enforcement,
-        osLevelContainment: enforcement === 'os-level',
+        // `enforcement`, `osLevelContainment`, the mechanism, the network plan, and every
+        // degradation, all from the one plan. A consumer gating CI on containment needs
+        // the gaps as data, not as a paragraph it has to parse out of the text output.
+        ...containmentJson(plan),
         reference: 'docs/architecture/adr/0007-sandbox-and-permissions.md',
       },
     });
@@ -611,7 +710,7 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   io.out('\n');
 
   renderProviders(section, io, s);
-  renderSandbox(enforcement, io);
+  renderSandbox(plan, platform, io);
 
   if (failed.length > 0) {
     io.err(`\n${s.bad(`${failed.length} required check(s) failed.`)}\n`);

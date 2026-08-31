@@ -176,6 +176,9 @@ importers:
       '@adze/retrieval':
         specifier: workspace:*
         version: link:../retrieval
+      '@adze/sandbox':
+        specifier: workspace:*
+        version: link:../sandbox
       commander:
         specifier: 'catalog:'
         version: 15.0.0

@@ -180,9 +180,13 @@ describe('adze doctor', () => {
       expect(out).toContain('0007-sandbox-and-permissions.md');
       expect(out).not.toContain('OS-level sandbox.\n');
     } else if (process.platform === 'darwin') {
-      expect(out).toContain('Seatbelt');
+      // Either the mechanism is in force, or the report names the binary whose absence
+      // means it is not. Asserting `Seatbelt` unconditionally would assert something about
+      // this machine's `PATH` rather than about the code — and a macOS host without
+      // `sandbox-exec` genuinely has no containment, which is the case this now covers.
+      expect(out).toMatch(/Seatbelt|sandbox-exec/);
     } else if (process.platform === 'linux') {
-      expect(out).toContain('bubblewrap');
+      expect(out).toMatch(/bubblewrap|bwrap/);
     }
   });
 
@@ -191,11 +195,39 @@ describe('adze doctor', () => {
     await run(argv('doctor', '--json'), io);
 
     const parsed = JSON.parse(io.stdout()) as {
-      sandbox: { enforcement: string; osLevelContainment: boolean };
+      sandbox: {
+        enforcement: string;
+        osLevelContainment: boolean;
+        degradations: readonly { code: string; scope: string }[];
+      };
     };
-    const expected = process.platform === 'darwin' || process.platform === 'linux';
-    expect(parsed.sandbox.osLevelContainment).toBe(expected);
-    expect(parsed.sandbox.enforcement).toBe(expected ? 'os-level' : 'gate-only');
+
+    // Derived from one plan, so the boolean and the string cannot disagree. This replaces
+    // an assertion that compared `enforcement` against `platform === 'darwin' || 'linux'`,
+    // which is the false claim this wiring exists to remove: it was true of the *platform*
+    // and false of the product, and it stays false on a Linux host with no `bwrap`.
+    expect(parsed.sandbox.osLevelContainment).toBe(parsed.sandbox.enforcement === 'os-level');
+    // `not-applicable` is reserved for `full-access`, and the default mode is not that.
+    expect(['os-level', 'gate-only']).toContain(parsed.sandbox.enforcement);
+
+    if (process.platform === 'win32') {
+      // Never os-level here, and never without the specifics. `@adze/sandbox` has no code
+      // path that makes Windows report otherwise, and this is the surface-level guard.
+      expect(parsed.sandbox.enforcement).toBe('gate-only');
+      expect(parsed.sandbox.degradations.map((gap) => gap.code)).toEqual(
+        expect.arrayContaining([
+          'windows-no-restricted-token',
+          'windows-no-job-object',
+          'windows-no-appcontainer',
+        ]),
+      );
+    }
+
+    // Enforcement below `os-level` is never reported without at least one
+    // containment-scope reason. A bare "gate-only" is not actionable.
+    if (parsed.sandbox.enforcement === 'gate-only') {
+      expect(parsed.sandbox.degradations.some((gap) => gap.scope === 'containment')).toBe(true);
+    }
   });
 
   it('exits 0 when only optional tooling is missing', async () => {

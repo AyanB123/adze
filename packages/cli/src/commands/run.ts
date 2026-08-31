@@ -20,14 +20,20 @@
  * a bug in every metric computed from these runs.
  */
 
-import { sandboxEnforcement } from '@adze/protocol';
+import type { Warning } from '@adze/protocol';
 import { denyingChannel, promptingChannel, stdinReader } from '../agent/approval.js';
 import { renderFailure } from '../agent/failure.js';
 import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
-import { buildAgent } from '../agent/setup.js';
+import {
+  type CliSandbox,
+  containmentLine,
+  createCliSandbox,
+  degradationLines,
+} from '../agent/sandbox.js';
+import { type AgentSetup, buildAgent } from '../agent/setup.js';
 import { type RunSummary, renderSummary, summaryJson } from '../agent/summary.js';
-import { EXIT, type ExitCode, type Io, styleFor, writeJsonLine } from '../output.js';
+import { EXIT, type ExitCode, type Io, type Style, styleFor, writeJsonLine } from '../output.js';
 
 export interface RunOptions extends AgentFlags {
   /** Test seam: a scripted approval channel and a mock model, so no key is needed. */
@@ -43,7 +49,14 @@ export interface RunOptions extends AgentFlags {
  */
 export interface TestHooks {
   readonly languageModel?: Parameters<typeof buildAgent>[0]['languageModel'];
-  readonly broker?: Parameters<typeof buildAgent>[0]['broker'];
+  /**
+   * A pre-built sandbox, so a test can supply a broker that runs nothing.
+   *
+   * Replaces a `broker` hook that no test ever used, which is how the real broker went
+   * unnoticed for so long. Omitting this selects the real mechanism for the host, which
+   * is what a user gets — so a test that omits it is testing the shipped path.
+   */
+  readonly containment?: CliSandbox;
   /** Isolates provider resolution from the real environment. See {@link buildAgent}. */
   readonly resolve?: Parameters<typeof buildAgent>[0]['resolve'];
   readonly reader?: Parameters<typeof promptingChannel>[0]['reader'];
@@ -75,7 +88,23 @@ export async function runRun(
 
   const hooks = options.__testHooks;
   const renderer = new EventRenderer({ io, style, json: invocation.json, quiet: invocation.quiet });
-  const enforcement = sandboxEnforcement(process.platform, invocation.sandboxMode);
+
+  // Before the approval channel, because the prompt has to tell the user whether an
+  // approved command will be confined, and only the plan knows. Deriving that from
+  // `sandboxEnforcement(process.platform, mode)` — which is what this did — answers a
+  // question about the *platform*: it says `os-level` on a macOS host whose `PATH` has no
+  // `sandbox-exec`, so the prompt promised a boundary that was not there.
+  const containment =
+    hooks?.containment ??
+    (await createCliSandbox({
+      mode: invocation.sandboxMode,
+      // Matches what core's gate passes to `exec`: `SandboxConfig.writableRoots` is empty
+      // here, and the gate resolves empty to the workspace root.
+      writableRoots: [invocation.workspaceRoot],
+      approvals: invocation.approvals,
+      commandRules: invocation.commandRules,
+    }));
+  const enforcement = containment.plan.enforcement;
 
   // ADR-0007: `never` refuses rather than escalating. The gate already never calls the
   // channel under that policy; handing it a denying one means even a gate bug cannot
@@ -105,7 +134,7 @@ export async function runRun(
       instructions: invocation.instructions,
       sink: renderer.sink,
       approvalChannel: approvals,
-      ...(hooks?.broker === undefined ? {} : { broker: hooks.broker }),
+      containment,
       ...(hooks?.languageModel === undefined ? {} : { languageModel: hooks.languageModel }),
       ...(hooks?.resolve === undefined ? {} : { resolve: hooks.resolve }),
     });
@@ -116,15 +145,7 @@ export async function runRun(
     });
 
     if (!invocation.json) {
-      io.err(
-        `${style.dim(`${agent.model.provider}/${agent.model.model} · ${invocation.sandboxMode} · approvals: ${invocation.approvals}`)}\n`,
-      );
-      // Reported before the turn, not after. A user who is about to approve a command needs
-      // to know there is no containment *first*.
-      for (const warning of init.warnings) {
-        io.err(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
-      }
-      io.err('\n');
+      renderPreamble(agent, invocation, init.warnings, io, style);
     }
 
     const { sessionId } = await agent.engine.sessionCreate({
@@ -181,6 +202,37 @@ export async function runRun(
   } finally {
     approvals.close();
   }
+}
+
+/**
+ * The model, the settings in force, and everything that will not be enforced.
+ *
+ * Written to stderr before the turn, not after. A user who is about to approve a command
+ * needs to know whether anything will confine it *first*.
+ *
+ * Every degradation is printed — not a count and not a summary. `plan.degradations` is
+ * the plan's own answer to "what did I ask for that I am not getting", and a surface that
+ * trimmed it for brevity would leave the user believing in a boundary that is not there.
+ * On Windows that is five lines, which is proportionate to being the platform with no
+ * containment at all.
+ */
+function renderPreamble(
+  agent: AgentSetup,
+  invocation: ReturnType<typeof parseAgentFlags>,
+  warnings: readonly Warning[],
+  io: Io,
+  style: Style,
+): void {
+  io.err(
+    `${style.dim(`${agent.model.provider}/${agent.model.model} · ${invocation.sandboxMode} · approvals: ${invocation.approvals} · ${containmentLine(agent.containment)}`)}\n`,
+  );
+  for (const gap of degradationLines(agent.containment)) {
+    io.err(`${style.warn('not enforced')} ${gap}\n`);
+  }
+  for (const warning of warnings) {
+    io.err(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
+  }
+  io.err('\n');
 }
 
 interface CancelHandle {

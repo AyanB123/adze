@@ -31,6 +31,7 @@
     "@adze/protocol": "workspace:*",
     "@adze/providers": "workspace:*",
     "@adze/retrieval": "workspace:*",
+    "@adze/sandbox": "workspace:*",
     "commander": "catalog:",
     "picocolors": "catalog:"
   },

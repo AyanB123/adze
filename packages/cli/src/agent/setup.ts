@@ -10,14 +10,7 @@
  * no startup latency for a transport it does not need.
  */
 
-import {
-  Engine,
-  type EventSink,
-  NodeSubprocessBroker,
-  type SandboxBroker,
-  type SearchBackend,
-  scrubEnvironment,
-} from '@adze/core';
+import { Engine, type EventSink, type SearchBackend } from '@adze/core';
 import type {
   ApprovalPolicy,
   CommandRule,
@@ -32,9 +25,11 @@ import {
   type ResolvedConfig,
   type ResolveOptions,
 } from '@adze/providers';
+import type { ContainmentPlan } from '@adze/sandbox';
 import { resolveShellPrefix } from '../shell.js';
 import { CLI_VERSION } from '../version.js';
 import type { ApprovalChannel } from './approval.js';
+import type { CliSandbox } from './sandbox.js';
 import { RetrievalSearchBackend } from './search.js';
 
 export interface AgentSetup {
@@ -43,6 +38,13 @@ export interface AgentSetup {
   readonly model: ModelSelection;
   readonly config: ResolvedConfig;
   readonly sandbox: SandboxConfig;
+  /**
+   * What the OS sandbox will actually enforce, and everything it will not.
+   *
+   * Returned so a surface renders the boundary that is in force rather than the one it
+   * requested. `SandboxConfig` above is the request; this is the answer.
+   */
+  readonly containment: ContainmentPlan;
   readonly approvals: ApprovalPolicy;
   readonly workspaceRoot: string;
 }
@@ -59,8 +61,17 @@ export interface AgentOptions {
   readonly instructions?: string | undefined;
   readonly sink: EventSink;
   readonly approvalChannel: ApprovalChannel;
-  /** Injected by tests so no real subprocess or network is involved. */
-  readonly broker?: SandboxBroker;
+  /**
+   * The wired OS sandbox: the broker the gate authorizes against, and its plan.
+   *
+   * **Required, and deliberately not optional.** The field it replaces was
+   * `broker?: SandboxBroker`, an override nothing in the repository ever supplied — so
+   * every run silently fell back to core's `NodeSubprocessBroker`, which reports
+   * `gate-only` on every platform by construction. An optional containment seam is
+   * precisely how `@adze/sandbox` came to be unreachable, so this one cannot be omitted.
+   * A test that wants a scripted broker supplies a {@link CliSandbox} carrying it.
+   */
+  readonly containment: CliSandbox;
   /**
    * Retrieval, for `glob`, `grep`, and `symbols`.
    *
@@ -117,11 +128,13 @@ export function buildAgent(options: AgentOptions): AgentSetup {
 
   const engine = new Engine({
     provider: gateway,
-    // The subprocess broker's environment is scrubbed of credential-shaped names. The
-    // model chooses the commands, so a key in the environment is a key one `env` away
-    // from the transcript. This is a mitigation, not a boundary — only OS-level
-    // containment closes the rest, and on Windows there is none (ADR-0007).
-    broker: options.broker ?? new NodeSubprocessBroker({ env: scrubEnvironment(process.env) }),
+    // `@adze/sandbox` picks the mechanism: Seatbelt on macOS, bubblewrap on Linux where
+    // user namespaces allow it, an honest partial broker on Windows. Every broker there
+    // also scrubs credential-shaped environment names before spawning, so the mitigation
+    // the previous `NodeSubprocessBroker` provided is kept and a real boundary is added
+    // underneath it on the platforms that have one. Windows still has none (ADR-0007), and
+    // `options.containment.plan` is what the surface prints rather than an assumption.
+    broker: options.containment.broker,
     // Without this, `glob`, `grep`, and `symbols` report themselves unavailable and the
     // agent falls back to `bash grep` — one approval prompt per search, and raw stdout
     // for the model to scrape instead of ranked structured hits.
@@ -142,6 +155,7 @@ export function buildAgent(options: AgentOptions): AgentSetup {
     model,
     config,
     sandbox,
+    containment: options.containment.plan,
     approvals: options.approvals,
     workspaceRoot: options.workspaceRoot,
   };

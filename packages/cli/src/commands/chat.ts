@@ -22,7 +22,6 @@
 
 import { addUsage, ZERO_USAGE } from '@adze/core';
 import type { Usage } from '@adze/protocol';
-import { sandboxEnforcement } from '@adze/protocol';
 import {
   type ApprovalChannel,
   denyingChannel,
@@ -33,6 +32,7 @@ import {
 import { renderFailure } from '../agent/failure.js';
 import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
+import { containmentLine, createCliSandbox, degradationLines } from '../agent/sandbox.js';
 import { type AgentSetup, buildAgent } from '../agent/setup.js';
 import { renderSummary } from '../agent/summary.js';
 import { EXIT, type ExitCode, field, type Io, type Style, styleFor } from '../output.js';
@@ -65,7 +65,18 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
 
   const hooks = options.__testHooks;
   const reader: LineReader = hooks?.reader ?? stdinReader();
-  const enforcement = sandboxEnforcement(process.platform, invocation.sandboxMode);
+  // The real mechanism for this host, and the plan it will apply. Built before the
+  // approval channel because the prompt has to say whether an approved command will be
+  // confined, and only the plan knows that — see the same note in `run`.
+  const containment =
+    hooks?.containment ??
+    (await createCliSandbox({
+      mode: invocation.sandboxMode,
+      writableRoots: [invocation.workspaceRoot],
+      approvals: invocation.approvals,
+      commandRules: invocation.commandRules,
+    }));
+  const enforcement = containment.plan.enforcement;
   const approvals =
     invocation.approvals === 'never'
       ? denyingChannel("the approval policy is 'never', which refuses rather than escalating")
@@ -86,7 +97,7 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
       instructions: invocation.instructions,
       sink: renderer.sink,
       approvalChannel: approvals,
-      ...(hooks?.broker === undefined ? {} : { broker: hooks.broker }),
+      containment,
       ...(hooks?.languageModel === undefined ? {} : { languageModel: hooks.languageModel }),
       ...(hooks?.resolve === undefined ? {} : { resolve: hooks.resolve }),
     });
@@ -147,8 +158,13 @@ function renderBanner(
     `${style.bold('adze chat')} ${style.dim(`— ${agent.model.provider}/${agent.model.model}`)}\n`,
   );
   io.out(
-    `${style.dim(`${invocation.sandboxMode} · approvals: ${invocation.approvals} · /help for commands`)}\n`,
+    `${style.dim(`${invocation.sandboxMode} · approvals: ${invocation.approvals} · ${containmentLine(agent.containment)} · /help for commands`)}\n`,
   );
+  // The complete list of what the plan will not enforce, for the same reason `run` prints
+  // it: a trimmed list leaves the user believing in a boundary that is not there.
+  for (const gap of degradationLines(agent.containment)) {
+    io.out(`${style.warn('not enforced')} ${gap}\n`);
+  }
   for (const warning of init.warnings) {
     io.out(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
   }
