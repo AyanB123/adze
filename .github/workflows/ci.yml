@@ -95,6 +95,14 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm test
+        # `plugins/` is deliberately not a workspace package: a plugin is a directory
+        # holding `adze.plugin.json` and nothing more (ADR-0008), and the tests import
+        # `packages/*/src` by path so exactly one instance of core is loaded. Turbo
+        # enumerates packages, so it cannot see this directory — which is how 200-odd
+        # committed tests came to be running nowhere. Kept a separate step rather than
+        # chained with `&&`, because a pnpm script using `&&` silently runs nothing on
+        # Windows. See plugins/test/support.ts.
+      - run: pnpm test:plugins
 
   build:
     name: build (${{ matrix.os }}, node ${{ matrix.node }})

@@ -35,6 +35,20 @@
  * process. Requiring a `package.json` here purely to make an import look tidier would
  * mean the test fixtures were no longer shaped like the thing they test.
  *
+ * ## How these tests get run
+ *
+ * Because `plugins/` is not a workspace package, `turbo run test` cannot see this
+ * directory — turbo enumerates packages, and there is none here. These 200-odd tests
+ * were therefore written, committed, and then never executed again by CI, which is the
+ * quiet way a suite rots: `@adze/plugin-sdk` could break every one of them and the build
+ * would stay green.
+ *
+ * They now run as their own CI step, `pnpm test:plugins`. Deliberately a separate step
+ * rather than appended to `pnpm test` with `&&`: a pnpm script containing `&&` opens an
+ * interactive shell and runs nothing on Windows, so chaining them would have restored
+ * the silence it was meant to fix. If you move or rename this directory, move that
+ * script and the CI step with it.
+ *
  * No test in this directory touches the network, spawns a process, or needs a model key.
  */
 
