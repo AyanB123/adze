@@ -26,23 +26,23 @@ were run afterwards on the same tree.
 | `@adze/retrieval` | Landed, vectors deferred | typecheck clean · 250 tests, 2 skipped · lint clean |
 | `@adze/sandbox` | Landed, **no Windows containment** | typecheck clean · 291 tests, 4 skipped · lint clean |
 | `@adze/mcp` | Landed, client and server | typecheck clean · 83 tests · lint clean |
-| `@adze/plugin-sdk` | Landed | typecheck clean · 147 tests · lint clean |
+| `@adze/plugin-sdk` | Landed | typecheck clean · 153 tests · lint clean |
 | `@adze/cli` | Landed | typecheck clean · 141 tests · lint clean |
 | `@adze/sdk` | Landed | typecheck clean · 63 tests · lint clean |
 | `apps/vscode` | Landed, **unpublished** | typecheck clean · 125 tests · lint clean |
-| `plugins/` (8 first-party) | Landed | 201 tests · lint clean |
+| `plugins/` (8 first-party) | Landed | 202 tests · lint clean |
 | `bench/harness` | Landed | 116 tests · lint clean |
 | `apps/ide` | **Empty** | no source; M4 has not started |
 | `apps/hub` | **Empty** | no source |
 
-1,996 tests pass, with zero lint errors and zero lint warnings across 344 files.
+2,003 tests pass, with zero lint errors and zero lint warnings across 344 files.
 Six tests are skipped, and both groups are conditional rather than broken: two in
 `@adze/retrieval` require tree-sitter grammar binaries, and four in
 `@adze/sandbox` are the real-containment tests, which need a host that actually
 has Seatbelt or bubblewrap and therefore cannot run on Windows.
 
 Two counts are easy to misread. `plugins/` is deliberately not a workspace
-package, so Turborepo cannot see it and its 201 tests run from a separate root
+package, so Turborepo cannot see it and its 202 tests run from a separate root
 script — that is why they once ran nowhere at all. And `bench/harness` is counted
 here only because it is verified; nothing under `bench/` is imported by product
 code.
@@ -236,11 +236,20 @@ not exist, and the exit criterion is about other people, not about us.
 | 5+ first-party plugins | ✅ Landed, 8 of them | Written to find out what the spec got wrong — and it did. See `plugins/FINDINGS.md`. |
 
 The plugins were built to stress the spec, and the most serious thing they found
-is recorded as a **policy bypass**: `edit.pre` is presented as the event for
-vetoing an edit, but for core's whole-file `write` tool the payload carries no
-content, so a guard inspecting `edits[].replace` refuses a credential added via
-`edit` and allows the identical one written via `write`. It is written up, with a
-suggested fix, and **not yet fixed**.
+was a **policy bypass**: `edit.pre` is presented as the event for vetoing an edit,
+but for core's whole-file `write` tool the payload carried no content, so a guard
+inspecting `edits[].replace` refused a credential added via `edit` and allowed the
+identical one written via `write`. That is now fixed — `EditPrePayload` carries
+`content`, and the spec documents the payload so an author cannot repeat the
+mistake by reading the spec alone.
+
+Fixing it found the same bug twice more, which is the better argument for building
+plugins before a registry than the original report was. `edit` accepts a whole-file
+`replacement` that had the identical gap and had not been reported, and
+`adze.secrets-guard` — the plugin written to prove policy can be encoded without
+forking — was itself allowing credentials in that shape, because its workaround had
+to key on the tool's name. A policy that enumerates tool names eventually misses
+one. Both are recorded in `plugins/FINDINGS.md`.
 
 **Done when:** a third party ships a plugin we did not help with. That is the real
 test of the spec.

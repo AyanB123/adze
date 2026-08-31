@@ -7,13 +7,17 @@ right now". This file is that feedback, written while building the eight first-p
 plugins in this directory.
 
 Each entry says what was attempted, what the spec or the SDK actually does, and what it
-cost. Nothing here is fixed in `packages/plugin-sdk` — these are reports.
+cost. These are reports rather than fixes, with one exception: finding 1 was a policy
+bypass, and it is fixed. Its report is kept exactly as written with the resolution
+recorded underneath, because the reasoning that found it is worth more than a tidy file —
+and because what the fix turned up is the strongest argument the report makes.
 
 ---
 
 ## 1. `edit.pre` cannot see the content of a whole-file write
 
-**Severity: this is a policy bypass.**
+**Severity: this is a policy bypass.** **Fixed — see Resolution at the end of this
+entry. The report below is unchanged from when it was written.**
 
 `docs/plugins/spec.md` presents `edit.pre` as *the* event for vetoing an edit, and its
 worked example branches on `ctx.path`. The SDK's `EditPrePayload` adds
@@ -45,6 +49,37 @@ the declared type is the one plugin authors read.
 payload — `content?: string` for a whole-file write — and add it to `EditPrePayload` so
 the type and the wire format agree. Either that, or say in the spec that `edit.pre` is
 edit-tool-only and whole-file writes must be policed on `tool.pre`.
+
+### Resolution
+
+The first option was taken. `EditPrePayload` carries `content` whenever `wholeFile` is
+true, `arguments` is now declared so the interface and the wire format agree, and
+`docs/plugins/spec.md` documents the payload in full with the instruction to read
+`content` as well as `edits[].replace` — the half of this report that adding a field does
+not address, since the reason a holed guard was reasonable to write is that the spec never
+said what the payload contained.
+
+Fixing it found two more instances of the same bug, which is the part of this entry worth
+keeping.
+
+**The SDK had a second entrance nobody had reported.** `edit` accepts a whole-file
+`replacement` for the applier's second tier, and `readCoreEditArgs` set `wholeFile: true`
+from it while dropping those bytes exactly as the `write` reader did. Fixing only the
+reported entrance would have left a guard that passes a credential as long as it arrives
+through `edit` with a `replacement` — a distinction no policy author would think to test.
+
+**`adze.secrets-guard` was itself writing credentials.** The workaround described above
+keyed on `input.name === 'write'`, so a credential passed as `edit`'s `replacement` was
+seen by neither handler and reached disk. The guard whose entire job is to not miss one
+missed one, silently, in exactly the shape the coupling made invisible. That is the
+sharpest available evidence for this entry's actual claim: the problem was never only the
+missing field, it was that the workaround required enumerating tool names, and a policy
+that enumerates tool names will eventually miss one.
+
+The guard now checks whole-file content on `edit.pre` through the payload. Its `tool.pre`
+branch is kept as a deliberate backstop rather than as the only key, since a host can
+remap which tools derive `edit.pre` and a credential guard should fail to allow rather
+than fail to deny.
 
 ---
 
