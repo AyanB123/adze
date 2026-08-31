@@ -132,10 +132,10 @@ the repository, and it is the product promise.
 - **Done when** `adze doctor` reports `os-level` on macOS and on Linux with
   usable bubblewrap, Windows still reports `gate-only` with its three named
   degradations, and the real-containment tests exercise the wired path.
-- **Governed by** ADR-0007, which anticipated this. **New ADR** no — but see the
-  decision needed in [§7](#7-decisions-i-should-not-make-alone). **Changeset**
+- **Governed by** ADR-0007, which anticipated this. **New ADR** no. **Changeset**
   yes: approved commands become confined, which is user-visible and can turn a
   previously working command into a refusal.
+- **Decided** ([§7](#7-decisions-taken)): now, on by default, before any publish.
 - **Size** medium. Cannot be fully verified on Windows; needs CI or a macOS/Linux
   host.
 
@@ -154,18 +154,55 @@ touching the decision.
 
 ### P1 — next
 
-#### P1.1 — Resolve `validator: 'tree-sitter'`
+#### P1.1 — Make `validator: 'tree-sitter'` producible
 
-[`D5`](#3-discrepancy-ledger). The rule is that this field reports the level that
-actually ran, because benchmark reports depend on it. A variant no code can produce
-is a claim about evidence that cannot be earned. Two options, and the choice is
-not mine — see [§7](#7-decisions-i-should-not-make-alone).
+[`D5`](#3-discrepancy-ledger), and **decided**: build it, rather than narrowing the
+type or documenting the gap.
 
-`packages/retrieval` already solves this problem properly: it returns
-`'tree-sitter'` only via `sawRealParse`, and a meta-test asserts the source never
-hardcodes it. Copy that.
+ADR-0005 already committed to this — "**With tree-sitter grammars present:** a real
+parse. Reject on error nodes." So it is an unfinished decision, not a new feature,
+and needs no new ADR. Today `'tree-sitter'` appears in `packages/apply/src` on
+exactly one line: the type declaration.
 
-- **Size** small to narrow the type; medium-plus to ship grammars.
+Three facts shape the implementation. `web-tree-sitter` is already in the
+`catalog:` block, so nothing new enters the dependency graph. Grammars resolve from
+a configured directory rather than being vendored — `$ADZE_GRAMMAR_DIR`, else
+`<root>/.adze/grammars` — so apply can follow the same convention with no
+duplicated files. And `@adze/apply` cannot import `@adze/retrieval`'s loader,
+because service packages must not import each other.
+
+1. `web-tree-sitter` as apply's first dependency, via `catalog:`.
+2. A loader in apply: lazy `await import('web-tree-sitter')`, the same grammar
+   directory convention, and **failed loads cached** — retrieval's discipline,
+   because retrying a missing grammar turns one absent file into a filesystem miss
+   on every edit.
+3. A new **async** validation entry that parses when a grammar is available and
+   rejects on error and missing nodes. `validate()` stays synchronous and
+   structural-only, so the existing public export keeps its shape; `applyEdit` is
+   already async and can await the new path.
+4. `'tree-sitter'` returned **only** when a parse actually completed. No grammar
+   means `structural`; unknown language means `none`.
+5. Tests: grammar-present cases gated the way retrieval gates its two, so they skip
+   loudly rather than silently; a case proving a broken edit is rejected with
+   `validator: 'tree-sitter'`; a case proving the no-grammar path never reports it;
+   and a meta-test that no source file hardcodes the value. Assert on `validator`,
+   not only on `ok`.
+
+**What this does not do**, and the plan should not imply otherwise: on a clone with
+no grammar files, validation still returns `structural`. The fix makes the variant
+*earnable*, which is the honesty problem. Whether it fires depends on the operator
+having grammars, exactly as retrieval already behaves. Vendoring grammars is a
+separate question carrying repo weight and a per-language licence review, and
+retrieval already declined it.
+
+- **Governed by** ADR-0005. **New ADR** no. **Changeset** yes — `'tree-sitter'`
+  becomes producible and a new validation entry point is public.
+- **Size** medium.
+- **Follow-up, not now:** if apply's and retrieval's loaders drift, extract the
+  shared "load runtime, resolve grammar, cache it" piece into a package both
+  depend on. That is a boundary change needing its own ADR, so it waits until the
+  duplication is real rather than anticipated. Node caches the `web-tree-sitter`
+  module itself, so two loaders is wasteful rather than incorrect.
 
 #### P1.2 — Unblock a third-party plugin author
 
@@ -237,8 +274,9 @@ dependency rules are currently review-enforced despite a document promising CI.
   on `\s+`. Making them agree would split `AGPL-3.0-or-later` and could turn a
   build failure into a pass on the strongest copyleft licence in the denylist. Add
   the comment that says so before someone tidies it.
-- **P2.6** — Commit a trajectory for the M1 run ([`D8`](#3-discrepancy-ledger)),
-  or restate the claim as unreproducible.
+- **P2.6** — Commit a trajectory for the M1 run ([`D8`](#3-discrepancy-ledger)).
+  **Decided** ([§7](#7-decisions-taken)): capture one. No artifact exists, so it
+  needs a fresh `adze run --json` against a real key.
 
 ---
 
@@ -307,24 +345,33 @@ that changes the *rate* at which this class of defect appears. Everything else i
 
 ---
 
-## 7. Decisions I should not make alone
+## 7. Decisions taken
 
-1. **Wire the sandbox now, or after the gallery publish?** Wiring it can turn a
-   command that worked yesterday into a refusal. Doing it before the extension
-   ships means the first public build is the confined one; doing it after means
-   early users get a behaviour change. Recommendation: before, because the
-   alternative is shipping a product whose security posture the documents
-   overstate.
-2. **`validator: 'tree-sitter'` — narrow the type, or ship grammars?** Narrowing
-   removes a public variant and admits that only `structural` and `none` can
-   happen. Shipping grammars makes the variant real, adds a WASM dependency, and
-   would need its own ADR under [`N13`](#5-do-not-do-this)'s reasoning.
-   Recommendation: narrow now, ship grammars when tree-sitter validation is
-   actually wanted, so the field never overstates its evidence in between.
-3. **Is M1 closed?** Its conditions are met as written and the caveats are honest,
-   but no artifact is committed and the author was also the auditor. The
-   project's own benchmark rules require artifacts for a claim. Recommendation:
-   keep the milestone closed, and commit a trajectory so it is checkable.
+Recorded so the reasoning survives, and so a later reader can tell a settled
+question from an open one.
+
+1. **Wire the sandbox now, on by default, before any gallery publish.** Nothing is
+   published, so no user gets a behaviour change, and Windows is `gate-only` either
+   way — the confined paths are verified by CI on macOS and Ubuntu rather than
+   locally. [`P0.2`](#p02--wire-adzesandbox-into-the-cli).
+2. **Make `validator: 'tree-sitter'` real, rather than narrowing the type or
+   documenting the gap.** ADR-0005 already committed to a real parse when grammars
+   are present, so the variant is an unfinished decision rather than an
+   overstatement to retract. The two rejected options are worth recording: removing
+   the variant from the protocol schema would have to be re-added later, and
+   documenting it at the declaration site would leave a declared outcome no code
+   can reach. [`P1.1`](#p11--make-validator-tree-sitter-producible).
+3. **Capture a trajectory for the M1 run.** No artifact exists, so this needs a
+   fresh `adze run --json` against a real key — which the maintainer has and CI does
+   not. Until it lands, M1's claim rests on a narrative in a commit body.
+   [`P2.6`](#p2--worth-doing-not-urgent).
+
+One judgement inside decision 2 is worth flagging for whoever implements it. The
+rule is that `validator` reports *the level that actually ran*, and since no result
+ever carries `'tree-sitter'` today, nothing currently misreports — the defect is
+that the type advertises a capability, not that a claim is false. That is why
+building it is the proportionate answer and why deleting the variant would have
+been a retreat from ADR-0005 rather than a correction to it.
 
 ---
 
