@@ -28,11 +28,46 @@ async function scratch(): Promise<string> {
   return dir;
 }
 
+/**
+ * Remove a scratch directory, tolerating Windows holding it open briefly.
+ *
+ * Windows refuses to delete a directory that is a live process's working directory,
+ * and a killed process's handle is not released synchronously. The teardown tests
+ * spawn a grandchild that inherits the scratch dir as its cwd, so cleanup can arrive
+ * a few milliseconds before the OS lets go — which surfaced as `EBUSY` on the
+ * Windows runner and failed a job in which every assertion had passed.
+ *
+ * Retrying for a bounded window turns that race into nothing. If the directory is
+ * still held after the window, the reason is reported on stderr rather than thrown:
+ * a leaked process is worth knowing about, and failing an unrelated test's teardown
+ * is a bad way to say so. Temp directories are reclaimed by the OS regardless.
+ */
+async function removeScratch(dir: string): Promise<void> {
+  const transient = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY']);
+  const attempts = 20;
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      await rm(dir, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code ?? 'unknown';
+      if (!transient.has(code) || attempt === attempts) {
+        process.stderr.write(
+          `[@adze/sandbox] could not remove scratch dir after ${attempt} attempts ` +
+            `(${code}): ${dir}\n`,
+        );
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
+}
+
 afterEach(async () => {
   while (dirs.length > 0) {
     const dir = dirs.pop();
     if (dir === undefined) continue;
-    await rm(dir, { recursive: true, force: true });
+    await removeScratch(dir);
   }
 });
 
