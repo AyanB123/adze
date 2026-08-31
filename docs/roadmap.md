@@ -10,44 +10,71 @@ Progress is tracked in [GitHub milestones](https://github.com/AyanB123/adze/mile
 
 ## Where the code actually is
 
-Verified 2026-08-29 by running each package's typecheck, test suite, and linter
-independently, then rebuilding every package from committed source and
-re-checking so that cross-package types resolve against freshly generated
-declarations rather than stale build output.
+Verified 2026-08-30 on Windows (win32 10.0.26200, Node 25.5.0, pnpm 10.20.0) by
+deleting every `dist/` directory, rebuilding all 13 build targets from committed
+source with the Turborepo cache explicitly bypassed, then re-running typecheck
+against the freshly generated declarations so cross-package types resolve against
+new output rather than stale artifacts. Lint, typecheck, and the full test suite
+were run afterwards on the same tree.
 
 | Package | State | Evidence |
 | --- | --- | --- |
 | `@adze/protocol` | Landed | typecheck clean · 72 tests · lint clean |
-| `@adze/core` | Landed | typecheck clean · 290 tests · lint clean |
+| `@adze/core` | Landed | typecheck clean · 308 tests · lint clean |
 | `@adze/apply` | Landed | typecheck clean · 63 tests · lint clean |
-| `@adze/providers` | Landed | typecheck clean · 130 tests · lint clean |
+| `@adze/providers` | Landed | typecheck clean · 135 tests · lint clean |
 | `@adze/retrieval` | Landed, vectors deferred | typecheck clean · 250 tests, 2 skipped · lint clean |
-| `@adze/cli` | Landed | typecheck clean · 99 tests · lint clean |
+| `@adze/sandbox` | Landed, **no Windows containment** | typecheck clean · 291 tests, 4 skipped · lint clean |
+| `@adze/mcp` | Landed, client and server | typecheck clean · 83 tests · lint clean |
+| `@adze/plugin-sdk` | Landed | typecheck clean · 147 tests · lint clean |
+| `@adze/cli` | Landed | typecheck clean · 141 tests · lint clean |
 | `@adze/sdk` | Landed | typecheck clean · 63 tests · lint clean |
-| `@adze/mcp` | **In progress** | no committed source yet |
-| `apps/vscode` | **In progress** | no committed source yet |
-| `@adze/sandbox` | **Empty** | no source, no containment anywhere |
-| `@adze/plugin-sdk` | **Empty** | plugin surfaces are specified, not built |
+| `apps/vscode` | Landed, **unpublished** | typecheck clean · 125 tests · lint clean |
+| `plugins/` (8 first-party) | Landed | 201 tests · lint clean |
+| `bench/harness` | Landed | 30 tests · lint clean |
+| `apps/ide` | **Empty** | no source; M4 has not started |
+| `apps/hub` | **Empty** | no source |
 
-967 tests pass across the seven landed packages, with zero lint errors and zero
-lint warnings. The two skipped tests are conditional on tree-sitter grammar
-binaries being present, and are skipped when they are not.
+1,909 tests pass, with zero lint errors and zero lint warnings across 338 files.
+Six tests are skipped, and both groups are conditional rather than broken: two in
+`@adze/retrieval` require tree-sitter grammar binaries, and four in
+`@adze/sandbox` are the real-containment tests, which need a host that actually
+has Seatbelt or bubblewrap and therefore cannot run on Windows.
+
+Two counts are easy to misread. `plugins/` is deliberately not a workspace
+package, so Turborepo cannot see it and its 201 tests run from a separate root
+script — that is why they once ran nowhere at all. And `bench/harness` is counted
+here only because it is verified; nothing under `bench/` is imported by product
+code.
 
 ### Three gaps stated plainly
 
 These are the claims a reader is most likely to assume in our favour, so they are
 recorded here rather than left to be discovered.
 
-1. **There is no OS-level sandbox containment on any platform.** Not on Windows,
-   and not on macOS or Linux either. `@adze/sandbox` contains no code. What
-   exists today is the permission gate and the approval policy inside
-   `@adze/core`, which every tool call does pass through — but an approved
-   command runs unconfined on every platform. `adze doctor` and `adze run` both
-   report this at runtime.
+1. **There is no sandbox containment on Windows, and no syscall confinement
+   anywhere.** `@adze/sandbox` has landed, and where a mechanism exists it is
+   real: Seatbelt on macOS, bubblewrap on Linux, and opt-in Docker each deny
+   writes outside the writable roots, deny network, and contain the subprocess
+   tree, reporting `os-level` enforcement. On **Windows there is nothing** — no
+   restricted token, no job object, no AppContainer, because none of the three is
+   reachable through `child_process.spawn`. A Windows plan reports `gate-only`,
+   and what protects the machine there is the permission gate alone. In every
+   row, including the `os-level` ones, the syscall surface is unrestricted: these
+   mechanisms contain an agent doing damage, not code actively trying to escape,
+   and each plan carries that as an explicit degradation. Enforcement is proven
+   rather than described — `packages/sandbox/test/platform.test.ts` attempts a
+   write outside the roots and requires it to be blocked — but those tests skip
+   on Windows, which is the platform this verification ran on. They run in CI on
+   the macOS and Ubuntu runners.
 2. **No benchmark result has been published.** `apply-bench` runs and passes its
    50 cases, but that suite measures the applier against hand-written edits. It
    is not a measurement of any model, and its number is not a published result.
-   Nothing has been run against SWE-rebench or Terminal-Bench.
+   Nothing has been run against SWE-rebench or Terminal-Bench. The two
+   publication gates from the benchmark policy — no win claimed inside 3
+   percentage points, and default-deny on citation hosts — are implemented but
+   **not yet wired into the report generator**, so today they constrain a
+   maintainer who chooses to call them rather than one who forgets. See M5.
 3. **No live end-to-end run has been verified against a real model.** The path
    from prompt through the turn machine to a provider HTTP request is exercised
    and its failure handling is verified, but nobody has yet watched
@@ -101,9 +128,10 @@ from whatever got built.
 
 **Goal: `adze "fix the failing test"` works end to end in a real repository.**
 
-Every deliverable below has landed except the sandbox. The goal above has *not*
-been demonstrated, because no one has yet run the CLI to completion against a
-real model with a valid key. The milestone therefore stays open.
+Every deliverable below has landed, including the sandbox on the platforms where
+containment is possible. The goal above has *not* been demonstrated, because no
+one has yet run the CLI to completion against a real model with a valid key. The
+milestone therefore stays open.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
@@ -112,7 +140,7 @@ real model with a valid key. The milestone therefore stays open.
 | `@adze/core` | ✅ Landed | Turn machine, tool registry, permission gate, epoch context assembler |
 | `@adze/providers` | ✅ Landed | Anthropic, OpenAI, OpenAI-compatible; cache-aware cost accounting |
 | `@adze/retrieval` | ✅ Landed | ripgrep + tree-sitter symbols + RRF fusion. Vectors deferred. |
-| `@adze/sandbox` | ❌ Not started | No code. No OS containment on any platform; the gate is all that exists. |
+| `@adze/sandbox` | ✅ Landed, Windows excepted | Seatbelt, bubblewrap, opt-in Docker report `os-level`. Windows reports `gate-only` and confines nothing. Syscall surface unrestricted everywhere. |
 | `@adze/cli` | ✅ Landed | `run`, `chat`, `apply`, `validate`, `doctor`, `models` |
 | `bench/suites/apply-bench` | ✅ Landed | 50/50 cases pass; wired into CI |
 
@@ -130,36 +158,55 @@ subagent runner are implemented in `@adze/core`; what M3 adds is the
 
 ---
 
-## M2 — Extension and MCP — started
+## M2 — Extension and MCP — substantially complete, exit criterion unmet
 
 **Goal: installable from Open VSX and the Marketplace; MCP works both directions.**
 
-Work on `apps/vscode` and `@adze/mcp` is underway. Neither has committed source
-yet, so nothing in this milestone is usable.
+`apps/vscode` and `@adze/mcp` have both landed. The milestone stays open on its
+exit criterion rather than on its code: **nothing has been published to either
+gallery**, so no user can install this yet.
+
+The MCP half of the criterion is met. A server from the existing ecosystem —
+`@modelcontextprotocol/server-everything`, published by the MCP maintainers and
+not by us — was connected over stdio with no Adze-specific code on 2026-08-30: it
+negotiated revision `2025-11-25`, discovered 13 tools, 7 resources, and 4 prompts
+with zero warnings, and a tool call round-tripped through the permission gate and
+returned a server-computed result.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
-| `apps/vscode` | 🚧 In progress | Chat sidebar, inline diff via decorations, engine in-process |
-| `@adze/mcp` client | 🚧 In progress | stdio + Streamable HTTP; MCP servers as tools |
-| `@adze/mcp` server | 🚧 In progress | **Adze addressable by other agents.** Cheap, and makes Adze useful to people who will not switch tools. |
-| Plugin surfaces 1–3 | ⬜ Not started | Tools, context providers, slash commands |
-| Config system | ⬜ Not started | `.adze/config.jsonc`, `AGENTS.md` conventions |
-| Ghost text | ⬜ Not started | `InlineCompletionItemProvider` — stable public API |
+| `apps/vscode` | ✅ Landed, unpublished | Chat sidebar, inline diff review, approval UI, engine in-process |
+| `@adze/mcp` client | ✅ Landed | stdio + Streamable HTTP; MCP servers as tools, each declaring effects the gate authorizes |
+| `@adze/mcp` server | ✅ Landed | **Adze addressable by other agents.** Cheap, and makes Adze useful to people who will not switch tools. |
+| Plugin surfaces 1–3 | ✅ Landed | Tools, context providers, slash commands — in `@adze/plugin-sdk`, ahead of schedule |
+| Config system | ⬜ Not started | `.adze/config.jsonc`, `AGENTS.md` conventions. Only the provider slice exists, in strict JSON. |
+| Ghost text | ✅ Landed, off by default | `InlineCompletionItemProvider`; `adze.inlineCompletion.enabled` defaults to false |
 
 **Done when:** published to both galleries, and an MCP server from the existing
 ecosystem works with no Adze-specific code.
 
 ---
 
-## M3 — Plugins that can express a workflow
+## M3 — Plugins that can express a workflow — partly landed, ahead of schedule
 
-| Deliverable | Notes |
-| --- | --- |
-| Hooks (surface 4) | Lifecycle events with `allow` / `deny` / `modify`. **The one that makes policy a community problem instead of a roadmap item.** |
-| Subagents (surface 5) | Declarative prompt, tool allowlist, model preference |
-| WASM host | `wasm32-wasip2`, hard timeouts |
-| `@adze/plugin-sdk` | Manifest schema, authoring types, `adze plugin dev` with local override |
-| 5+ first-party plugins | Written to find out what the spec got wrong |
+Surfaces 4 and 5 landed early, during M2, because the first-party plugins needed
+them. The milestone stays open: the WASM host is not built, `adze plugin dev` does
+not exist, and the exit criterion is about other people, not about us.
+
+| Deliverable | State | Notes |
+| --- | --- | --- |
+| Hooks (surface 4) | ✅ Landed | Lifecycle events with `allow` / `deny` / `modify`. **The one that makes policy a community problem instead of a roadmap item.** |
+| Subagents (surface 5) | ✅ Landed | Declarative prompt, tool allowlist, model preference |
+| WASM host | ⬜ **Not started** | `wasm32-wasip2` is a seam, not a runtime. The default `unavailableWasmRuntime` **fails the load** rather than skipping the module, because a policy hook that quietly never runs looks like a working policy and is not. What actually executes procedural plugin code today is a local ES module runtime. |
+| `@adze/plugin-sdk` | 🚧 Partly landed | Manifest schema and authoring types landed. `adze plugin dev` with local override is **not built** — there is no `plugin` subcommand. |
+| 5+ first-party plugins | ✅ Landed, 8 of them | Written to find out what the spec got wrong — and it did. See `plugins/FINDINGS.md`. |
+
+The plugins were built to stress the spec, and the most serious thing they found
+is recorded as a **policy bypass**: `edit.pre` is presented as the event for
+vetoing an edit, but for core's whole-file `write` tool the payload carries no
+content, so a guard inspecting `edits[].replace` refuses a credential added via
+`edit` and allows the identical one written via `write`. It is written up, with a
+suggested fix, and **not yet fixed**.
 
 **Done when:** a third party ships a plugin we did not help with. That is the real
 test of the spec.
@@ -186,18 +233,24 @@ merge bot has tracked upstream for four consecutive weekly releases unattended.
 
 ---
 
-## M5 — Evaluation infrastructure
+## M5 — Evaluation infrastructure — Tier 1 only
 
 Runs in parallel with M1–M2, not after.
 
-| Deliverable | Notes |
-| --- | --- |
-| `bench/harness` | Harbor adapters. **We build adapters, not a harness.** |
-| Two-container isolation | Future git history deleted; only the committed diff crosses to a fresh verifier |
-| Leakage assertions | Test-patch absence, gold-patch-field absence, future-history absence, network isolation — as **build failures** |
-| Tier 1 / 2 / 3 pipelines | Per [ADR-0011](architecture/adr/0011-benchmark-harness.md) |
-| Report format | Trajectories for every trial including failures, container digests, resource floor *and* ceiling, pinned model snapshots, seeds, cost with cache hit rate |
-| First public report | Whatever the number is. Including if it is bad. |
+Tier 1 is live: `apply-bench` runs on every pull request, passes 50/50 cases, and
+uploads its run directory as an artifact. It is deterministic and free — no model
+calls, no network, no container — which is also the limit of what exists. Nothing
+containerized has been built.
+
+| Deliverable | State | Notes |
+| --- | --- | --- |
+| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, and report rendering landed (30 tests). Harbor adapters are **not** built. |
+| Two-container isolation | ⬜ Not started | No container code exists anywhere in `bench/`. |
+| Leakage assertions | ⬜ Not started | Test-patch, gold-patch-field, future-history, and network-isolation assertions are **not implemented**, so they are not yet the build failures the policy requires. |
+| Tier 1 / 2 / 3 pipelines | 🚧 Tier 1 only | Tiers 2 and 3 need the container work above. |
+| Report format | 🚧 Partly landed | `report.md` genuinely emits limitations first, and that is reachable and tested: the limitations section is index 0, and a test compares its position against the first percentage in the rendered output. So it is a property of the generator rather than of the author. |
+| Publication gates | 🚧 **Written but unreachable** | The rules that matter most — no win claimed inside 3 percentage points, default-deny on citation hosts, and `mean ± SEM over ≥3 attempts` with fewer than three attempts returning `insufficient-attempts` — are implemented and correct in `publication.ts` and `statistics.ts`. Neither module is exported from `src/index.ts`, imported by the reporter, or covered by a test. Both are therefore *enforceable* rather than *enforced*, and Tier 1 does not exercise them because a deterministic pass/fail suite produces no pass@1 distribution to check. Wiring them is the prerequisite for any Tier-2 number. |
+| First public report | ⬜ Not started | Whatever the number is. Including if it is bad. |
 
 **Done when:** a stranger can re-run a published number from the artifacts alone.
 
