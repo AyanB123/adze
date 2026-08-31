@@ -1,0 +1,341 @@
+# Plan
+
+What to work on next, and why in this order.
+
+## How to use this document
+
+Four documents divide the work of steering this project, and they do not overlap:
+
+| Document | Answers |
+| --- | --- |
+| [`roadmap.md`](roadmap.md) | Where the code is, and what each milestone means |
+| [`architecture/adr/`](architecture/adr/) | Why each decision was made, and what it forbids |
+| [`benchmarks/strategy.md`](benchmarks/strategy.md) | What may be published as a number |
+| **this document** | What to do next, in what order, and what not to do |
+
+Every item below carries an id (`P0.1`, `D3`, `N7`). Cite them in commit bodies,
+issues, and pull requests — `Refs plan P0.2` — so the reasoning behind a change
+stays reachable after the branch is merged.
+
+This document does **not** restate progress. The verified state of every package
+lives in the roadmap's state table, and duplicating it here would produce a second
+number to keep in sync. What lives here is the part the roadmap deliberately does
+not carry: judgement about ordering.
+
+**When this goes stale.** Section [§1](#1-verification) records how it was
+verified. Anything in [§3](#3-discrepancy-ledger) is either fixed or still true —
+check before trusting it. The priorities in [§4](#4-priorities) assume the ledger;
+if the ledger changes materially, re-derive them rather than working down a list
+whose premises moved.
+
+---
+
+## 1. Verification
+
+Verified **2026-08-30** on Windows (win32 10.0.26200, Node 25.5.0, pnpm 10.20.0)
+by running `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm test:plugins`, and
+`pnpm bench:apply`, and by reading source rather than documentation for every
+claim in [§3](#3-discrepancy-ledger).
+
+Two limits on that verification, stated because they change what it is worth:
+
+- **Windows only.** The four real-containment tests in `@adze/sandbox` skip here,
+  as does anything needing Seatbelt or bubblewrap. CI covers macOS and Ubuntu.
+- **No model was called.** Nothing here verifies the `run` or `chat` path
+  end-to-end. See [`D8`](#3-discrepancy-ledger).
+
+---
+
+## 2. The pattern worth naming
+
+Four separate audits of this repository converge on the same shape, and it is more
+useful than any of the four findings individually.
+
+**This project builds and documents components well, and loses them at the wiring
+seam.** In each case below the code exists, is tested, is honestly commented, and
+is unreachable from anything a user runs:
+
+| Component | Built | Reachable from a user-run path? |
+| --- | --- | --- |
+| `@adze/sandbox` | 16 files, ~2,965 lines, Seatbelt + bubblewrap + Docker | **No.** No package declares a dependency on it. |
+| `publication.ts`, `statistics.ts` | 6 exported functions, unit-tested | **No.** The report pipeline imports none of them. |
+| `leakage.ts` | 3 of 6 assertions, 20 tests | **No.** `runner.ts` never imports it. |
+| `validator: 'tree-sitter'` | Declared in 4 schemas and a CLI switch | **No.** No code produces it; 0 grammars present. |
+
+The individual fixes are in [§4](#4-priorities). The systemic response is
+[`P1.5`](#p15--add-a-reachability-test-for-declared-capability): a test that asks
+whether a declared capability is reachable, so the fifth instance is caught by CI
+rather than by an audit.
+
+Why this matters more than it looks: every one of these is *documented honestly at
+the source*. `report-policy.ts` explains why it does not call the comparison gate.
+`wasm.ts` explains that its default runtime refuses to load. The code is candid.
+The failure is that candour at the module level does not aggregate into an accurate
+statement about the product, and the top-level documents are where a reader looks.
+
+---
+
+## 3. Discrepancy ledger
+
+Where a document and the code disagree. Severity is about what a reader would
+wrongly believe, not about effort.
+
+| id | Claim | Where | Reality | Severity |
+| --- | --- | --- | --- | --- |
+| **D1** | Seatbelt, bubblewrap and Docker "report `os-level`" | `roadmap.md` §gaps, M1 table | True of the package, **false of the product**. Nothing wires `@adze/sandbox`; the CLI builds core's `NodeSubprocessBroker`, which is `gate-only` on every platform by construction. | **Critical** — a false security claim |
+| **D2** | "no OS-level containment on any platform, because `@adze/sandbox` contains no code" | `README.md`, `docs/architecture/README.md`, `guides/README.md`, `guides/embedding.md` | Right conclusion, wrong reason. The package has ~2,965 lines. The reason is that nothing consumes it. | High |
+| **D3** | "twelve ADRs" | `roadmap.md` M0, `README.md` | **Thirteen.** ADR-0013 is committed, Accepted, and indexed. | High |
+| **D4** | "no platform ships OS-level containment today" | ADR-0013 Context | Contradicts ADR-0007's platform table. Describes the *product* correctly, but asserts a platform-support fact ADR-0007 denies — inside an accepted decision record. | High |
+| **D5** | `validator: 'tree-sitter'` is a producible outcome | `apply/src/types.ts`, protocol schema, 2 bench schemas, CLI switch | Unreachable. No code path emits it, and 0 grammar `.wasm` files exist outside `node_modules`. The project's own rule is that this field is "a claim about evidence". | High |
+| **D6** | "Two of them are asserted today" | `benchmarks/strategy.md` §leakage | Its own table two lines below marks **three** rows Asserted. Both were written in the same commit. | Medium |
+| **D7** | `@adze/plugin-sdk`, `@adze/sdk`, `@adze/mcp`, `apps/vscode` empty or in progress | `README.md`, `docs/architecture/README.md` | All landed. `README.md` also reports **904 tests** against a verified 2,003. | Medium |
+| **D8** | M1's exit criterion is met | `roadmap.md` M1 | Met as written, and honestly bounded to "one task, one model, one platform" — but the evidence is a narrative in a commit body. **No trajectory artifact is committed**, so the run is not reproducible from this repository. | Medium |
+| **D9** | `edit.pre` cannot see whole-file content; police it on `tool.pre` | `guides/plugins.md` | Fixed. The guide now teaches the exact pattern this repo's own post-mortem identifies as the bug that made `adze.secrets-guard` miss a credential. | Medium |
+| **D10** | `apps/ide` "Empty — no source" | `roadmap.md` state table | 26 tracked files: 9 pipeline scripts, 6 placeholder patches, branding fixtures. `apps/ide/README.md` is candid about all of it. | Low |
+| **D11** | `apply-bench` has 50 cases / "~200 synthetic edits" | `roadmap.md`, `README.md`, `benchmarks/strategy.md` | **51.** Three of four references were not updated when case 51 landed. | Low |
+| **D12** | "enforced by a dependency-cruiser check in CI" | `docs/architecture/README.md` | No dependency-cruiser anywhere in the repo. The five package-dependency rules are review-enforced only. | Low |
+| **D13** | `docs/` contains "research digests" | `README.md` | `docs/research/` is empty and untracked. Every ADR cites unnamed studies with no bibliography. | Low |
+| **D14** | `apps/hub` is a workspace package | `pnpm-workspace.yaml` | Empty directory, zero files. `bench/suites/nep-bench` likewise. `plugins/*` is declared as a workspace glob while CI documents that plugins are deliberately *not* workspace packages. | Low |
+
+---
+
+## 4. Priorities
+
+### P0 — before anything else
+
+#### P0.1 — Correct the sandbox claim
+
+The roadmap tells a reader that an approved command on macOS is confined to the
+writable roots. It is not. Under this project's honesty rules a false claim about
+the security posture outranks every other defect here, and it is cheap to fix.
+
+Correct [`D1`](#3-discrepancy-ledger) and [`D2`](#3-discrepancy-ledger) together,
+because the two say opposite things and both are wrong: the package exists **and**
+the product has no containment. `guides/getting-started.md` already states this
+correctly and is the model to copy.
+
+- **Done when** every document states the same thing: brokers exist and are
+  tested, no surface wires them, the shipped CLI is `gate-only` everywhere.
+- **Governed by** ADR-0007. **New ADR** no. **Changeset** no (docs only).
+- **Size** small.
+
+#### P0.2 — Wire `@adze/sandbox` into the CLI
+
+Makes [`P0.1`](#p01--correct-the-sandbox-claim)'s corrected statement obsolete in
+the right direction. The package's own README says the wiring is a constructor
+argument in a surface with no change to core, and `setup.ts` already accepts a
+`broker` override that nothing supplies — so this is plumbing, not design.
+
+This is the single largest quantity of built, tested, unreachable capability in
+the repository, and it is the product promise.
+
+- **Done when** `adze doctor` reports `os-level` on macOS and on Linux with
+  usable bubblewrap, Windows still reports `gate-only` with its three named
+  degradations, and the real-containment tests exercise the wired path.
+- **Governed by** ADR-0007, which anticipated this. **New ADR** no — but see the
+  decision needed in [§7](#7-decisions-i-should-not-make-alone). **Changeset**
+  yes: approved commands become confined, which is user-visible and can turn a
+  previously working command into a refusal.
+- **Size** medium. Cannot be fully verified on Windows; needs CI or a macOS/Linux
+  host.
+
+#### P0.3 — Fix the ADR count and ADR-0013's premise
+
+[`D3`](#3-discrepancy-ledger) and [`D4`](#3-discrepancy-ledger). A stale count is
+trivial. The ADR-0013 sentence matters more: an accepted decision record asserts a
+platform-support fact that ADR-0007 denies. Its argument only needs "prefix rules
+are load-bearing on `gate-only` platforms", so narrow the sentence without
+touching the decision.
+
+- **Done when** both counts say thirteen and ADR-0013's Context no longer
+  contradicts ADR-0007.
+- **New ADR** no — narrowing a Context sentence is not a reversal. **Changeset** no.
+- **Size** small.
+
+### P1 — next
+
+#### P1.1 — Resolve `validator: 'tree-sitter'`
+
+[`D5`](#3-discrepancy-ledger). The rule is that this field reports the level that
+actually ran, because benchmark reports depend on it. A variant no code can produce
+is a claim about evidence that cannot be earned. Two options, and the choice is
+not mine — see [§7](#7-decisions-i-should-not-make-alone).
+
+`packages/retrieval` already solves this problem properly: it returns
+`'tree-sitter'` only via `sawRealParse`, and a meta-test asserts the source never
+hardcodes it. Copy that.
+
+- **Size** small to narrow the type; medium-plus to ship grammars.
+
+#### P1.2 — Unblock a third-party plugin author
+
+`plugins/FINDINGS.md` finding 3, ranked by the audit as the worst of the eight
+open findings. `docs/plugins/spec.md` mentions neither `runtime` nor
+`allowUnsandboxedJs`, yet the loader refuses `runtime: 'js'` without the flag and
+refuses WASM by default. **Every procedural plugin that can run today needs a host
+flag the spec never mentions.** Compounding it: the spec advertises
+`adze plugin add` and `adze plugin dev`, neither of which exists, and its example
+manifest pins `engines.adze` to a range the SDK does not satisfy.
+
+M3's exit criterion is a third party shipping a plugin unaided. Today they hit
+three blockers before their first successful load.
+
+- **Done when** an author can follow the spec alone to a loading plugin, or the
+  spec states plainly what is not yet possible.
+- **Governed by** ADR-0008. **New ADR** no. **Changeset** only if the loader
+  changes.
+- **Size** medium. Also fix [`D9`](#3-discrepancy-ledger) here — the live guide
+  teaches the pre-fix workaround.
+
+#### P1.3 — Run the leakage assertions against a real run
+
+They exist, they are tested, and `runner.ts` does not import them, so no benchmark
+run has ever been checked for leakage. Lower severity than it sounds only because
+no number has been published — which is exactly the window in which to wire it.
+
+- **Done when** a run invokes the assertions and a violation fails the run.
+- **Governed by** ADR-0011. **New ADR** no. **Changeset** no (`bench/` is private).
+- **Size** small.
+
+#### P1.4 — Emit `audit.md`, and fix the count contradiction
+
+`benchmarks/strategy.md` requires `audit.md` in a report directory and `writeRun`
+does not emit one. Fold in [`D6`](#3-discrepancy-ledger) and
+[`D11`](#3-discrepancy-ledger) — the two/three contradiction and the 50/51/~200
+case count — since all three are the same document drifting from the same code.
+
+- **Size** small.
+
+#### P1.5 — Add a reachability test for declared capability
+
+The systemic response to [§2](#2-the-pattern-worth-naming). Four instances of
+built-and-unreachable were found by hand; the fifth should be found by CI.
+
+Cheapest useful form: assert that each package's public entry point transitively
+reaches its documented capabilities, and that a declared union variant has a
+producer. `packages/retrieval/test/invariants.test.ts` is the existing precedent.
+This also gives [`D12`](#3-discrepancy-ledger) somewhere to live, since the
+dependency rules are currently review-enforced despite a document promising CI.
+
+- **Size** medium. Highest leverage per line in this list.
+
+### P2 — worth doing, not urgent
+
+- **P2.1** — Refresh `README.md` and `docs/architecture/README.md`
+  ([`D7`](#3-discrepancy-ledger)). Both are badly stale; `README.md` is the first
+  thing a stranger reads and it undercounts tests by more than half. Deferred
+  below P1 only because it misleads *downward* — it undersells a working project
+  rather than overselling a broken one.
+- **P2.2** — Declare an authoritative source. Three status tables disagree and
+  nothing marks one canonical. Point the others at the roadmap.
+- **P2.3** — `pnpm-workspace.yaml` declares three globs that resolve to nothing
+  ([`D14`](#3-discrepancy-ledger)).
+- **P2.4** — A bibliography for the ADRs ([`D13`](#3-discrepancy-ledger)). Every
+  ADR cites "a published study found" with no source. For a project whose
+  positioning rests on evidence, a skeptic currently has nothing to follow.
+- **P2.5** — `scripts/check-licenses.mjs` detects `AND`/`OR` with `\b` and splits
+  on `\s+`. Making them agree would split `AGPL-3.0-or-later` and could turn a
+  build failure into a pass on the strongest copyleft licence in the denylist. Add
+  the comment that says so before someone tidies it.
+- **P2.6** — Commit a trajectory for the M1 run ([`D8`](#3-discrepancy-ledger)),
+  or restate the claim as unreproducible.
+
+---
+
+## 5. Do not do this
+
+Nineteen non-negotiables live across thirteen ADRs with no consolidated list, so a
+contributor would have to read all thirteen to learn that a helpful-looking change
+reverses a decision. This is that list. **Reversing any of these requires a new ADR
+that supersedes the old one** — not a commit.
+
+Ordered by how much the reversal looks like progress.
+
+| id | Constraint | ADR | Why the reversal is tempting |
+| --- | --- | --- | --- |
+| **N1** | **Do not build a benchmark harness.** Harbor owns the containers; we build adapters. | 0011 | M5 lists "two-container isolation — not started" and three leakage rows read like a to-do list. Writing container orchestration to close them is a reversal, not progress. |
+| **N2** | **Never relax matching past indentation tolerance.** The ladder is exact → whitespace-normalized → indentation-tolerant → anchored and stops. | 0005 | Every `not-found` refusal argues for one more strategy. Trigram or token-similarity would raise apparent success and silently apply wrong edits. |
+| **N3** | **Ambiguity is an error, never a guess.** | 0005 | Taking the first of several matches is the single change that would most improve the numbers, and is named "the single worst thing this package could do". |
+| **N4** | **No JSON-in-a-string tool-calling fallback.** A provider without native tool calling is `degraded`. | 0004 | Supporting a popular local model. Reintroduces a measured 7.3% tax. |
+| **N5** | **Approval policy `never` refuses; it does not escalate.** | 0007 | Avoiding a failed run. ADR-0013 records that the live run only proceeded via an explicit `--allow`, so the pressure is real. |
+| **N6** | **A plugin-supplied tool must never set `requested` itself.** | 0013 | Plugin surfaces have landed, making this the nearest live tripwire. Explicitly requires its own ADR. |
+| **N7** | **Tier-3 fast-apply is never a hard dependency.** | 0005 | Making a fast-apply provider the default breaks local-first. |
+| **N8** | **No network call for retrieval without explicit opt-in.** | 0006 | A default remote embedding provider when vectors land. |
+| **N9** | **No private back channel between a surface and the engine.** | 0001 | Named as "the temptation that destroys the architecture". |
+| **N10** | **No plugin UI in the engine.** | 0001, 0008 | |
+| **N11** | **Never a vendored merged fork of upstream**, and never rebase onto each tag. | 0010 | |
+| **N12** | **No tree search, planner/executor split, or reflection in the core loop.** | 0003 | Reopening needs a controlled experiment beating baseline by more than 3 points. |
+| **N13** | **Each Rust sidecar needs its own ADR.** | 0002 | The Windows containment helper is the first legitimate one. |
+| **N14** | **No open-core split, ever** — and *not* revisited because someone proposes one. | 0012 | Routes to GOVERNANCE.md's process. |
+| **N15** | **DCO, never a CLA.** | 0012 | |
+| **N16** | **Never a paid hub**; no registry service in v1. | 0008 | |
+| **N17** | **Never touch `marketplace.visualstudio.com`**, and do not tell users to sideload VSIX files — §2(b) prohibits *use*. | 0009 | |
+| **N18** | **No aggregator citations, ever.** No best-of-N headline. The Tier-1 smoke-slice number is never published. | 0011 | |
+| **N19** | **`pass@1`, mean ± SEM over ≥3 attempts, never max-over-N.** | 0011, 0003 | |
+
+---
+
+## 6. Sequencing
+
+**Why the sandbox goes first.** It is the only item that is simultaneously a false
+claim, a missing product capability, and already-written code. Fixing the claim
+([`P0.1`](#p01--correct-the-sandbox-claim)) costs an hour and removes a security
+misstatement. Wiring the package ([`P0.2`](#p02--wire-adzesandbox-into-the-cli))
+makes the honest version obsolete in the direction that helps users. Doing the
+claim first is deliberate: if the wiring turns out to be harder than it looks, the
+documents are already correct rather than waiting on it.
+
+**Why plugin authoring beats polishing the README.** M2's remaining criterion is
+publishing to a gallery; M3's is a third party shipping a plugin unaided. A
+stranger who installs the extension and tries to write a policy hook hits
+[`P1.2`](#p12--unblock-a-third-party-plugin-author) immediately. A stale
+`README.md` costs credibility; an unusable plugin surface costs the milestone.
+
+**Why the reachability test is worth more than any single fix it would catch.**
+[`P1.5`](#p15--add-a-reachability-test-for-declared-capability) is the only item
+that changes the *rate* at which this class of defect appears. Everything else in
+[§2](#2-the-pattern-worth-naming) is one instance.
+
+**What is blocked on something other than effort:**
+
+| Item | Needs |
+| --- | --- |
+| Verifying [`P0.2`](#p02--wire-adzesandbox-into-the-cli) | A macOS or Linux host, or CI |
+| Tier-2 benchmarks, and the comparison and max-over-N gates | Harbor, a dataset, model keys, a container runtime |
+| Windows containment | A Rust sidecar and its own ADR ([`N13`](#5-do-not-do-this)) |
+| A published number | Everything in [`benchmarks/strategy.md`](benchmarks/strategy.md)'s artifact list |
+
+---
+
+## 7. Decisions I should not make alone
+
+1. **Wire the sandbox now, or after the gallery publish?** Wiring it can turn a
+   command that worked yesterday into a refusal. Doing it before the extension
+   ships means the first public build is the confined one; doing it after means
+   early users get a behaviour change. Recommendation: before, because the
+   alternative is shipping a product whose security posture the documents
+   overstate.
+2. **`validator: 'tree-sitter'` — narrow the type, or ship grammars?** Narrowing
+   removes a public variant and admits that only `structural` and `none` can
+   happen. Shipping grammars makes the variant real, adds a WASM dependency, and
+   would need its own ADR under [`N13`](#5-do-not-do-this)'s reasoning.
+   Recommendation: narrow now, ship grammars when tree-sitter validation is
+   actually wanted, so the field never overstates its evidence in between.
+3. **Is M1 closed?** Its conditions are met as written and the caveats are honest,
+   but no artifact is committed and the author was also the auditor. The
+   project's own benchmark rules require artifacts for a claim. Recommendation:
+   keep the milestone closed, and commit a trajectory so it is checkable.
+
+---
+
+## 8. The single highest-value next action
+
+**Wire `@adze/sandbox` into the CLI** — [`P0.2`](#p02--wire-adzesandbox-into-the-cli),
+after the one-hour claim correction in [`P0.1`](#p01--correct-the-sandbox-claim).
+
+It converts roughly 2,965 lines of tested, unreachable code into the product's
+stated security posture; it is the only item on this list that closes a gap
+between what the documents promise and what a user gets on the security axis; the
+design work is already done and recorded in ADR-0007; and the package was
+deliberately built so the wiring is a constructor argument in a surface with no
+change to the engine.

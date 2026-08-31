@@ -6,6 +6,11 @@ inventing a schedule would be fiction. The *ordering* is the commitment.
 
 Progress is tracked in [GitHub milestones](https://github.com/AyanB123/adze/milestones).
 
+**This document says where the code is. [`plan.md`](plan.md) says what to do
+next** — the prioritized work, the ledger of places a document and the code
+disagree, and the consolidated list of decisions that a plausible-looking change
+would reverse.
+
 ---
 
 ## Where the code actually is
