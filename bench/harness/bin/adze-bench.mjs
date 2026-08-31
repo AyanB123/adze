@@ -52,6 +52,7 @@ Exit codes:
   0  every case met its expectation
   1  at least one case failed
   2  usage error, or the suite could not be loaded
+  3  the report violates docs/benchmarks/strategy.md and must not be published
 `;
 
 const VALUE_FLAGS = new Set(['--suite', '--filter', '--out']);
@@ -183,9 +184,15 @@ if (args.write) {
   written = await harness.writeRun(outcome, dir);
 }
 
+// Runs whether or not the run was written, so `--no-write` cannot be used to get a
+// number without the gate. The report itself already carries these violations inside
+// its limitations section; this is the copy a CI log shows and the reason for the
+// exit code.
+const policy = harness.checkReportPolicy(outcome.report);
+
 if (args.json) {
   process.stdout.write(
-    `${JSON.stringify({ report: outcome.report, written: written ?? null }, null, 2)}\n`,
+    `${JSON.stringify({ report: outcome.report, written: written ?? null, policy }, null, 2)}\n`,
   );
 } else {
   process.stdout.write(`${harness.renderConsoleSummary(outcome.report)}\n`);
@@ -204,5 +211,21 @@ if (args.json) {
   );
 }
 
+if (!policy.ok) {
+  process.stderr.write(
+    '\nadze-bench: this report violates docs/benchmarks/strategy.md and must not be\n' +
+      `published. ${policy.violations.length} violation(s):\n\n`,
+  );
+  for (const violation of policy.violations) {
+    process.stderr.write(`  ${violation.code}\n    ${violation.message}\n\n`);
+  }
+}
+
 const failed = outcome.report.totals.failed + outcome.report.totals.harnessErrors;
-process.exitCode = failed > 0 ? 1 : 0;
+// A policy violation outranks a failing case: a report that may not be published is a
+// worse outcome than one that reports a real failure honestly.
+if (!policy.ok) {
+  process.exitCode = 3;
+} else {
+  process.exitCode = failed > 0 ? 1 : 0;
+}

@@ -12,8 +12,15 @@
  * limitations heading precedes the first percentage in the output. Getting the
  * headline number to the top would take a deliberate edit to this file plus
  * deleting that test, which is the point.
+ *
+ * Rendering also validates. `checkReportPolicy` runs on the report here rather than
+ * being offered to the caller as an option, so there is no way to produce a
+ * `report.md` whose policy violations are not printed inside it, above every number.
+ * A caller that wanted a clean-looking report from a violating run would have to
+ * stop using this function.
  */
 
+import { checkReportPolicy } from './report-policy.js';
 import type { BenchReport, Breakdown, CaseResult } from './report-schema.js';
 import { formatRate } from './report-schema.js';
 
@@ -49,6 +56,26 @@ function caseLine(r: CaseResult): string {
  */
 function limitations(report: BenchReport): string[] {
   const lines = ['## Limitations', ''];
+
+  // Above every other caveat, because it is the one that says the rest should not be
+  // quoted at all. Deliberately not a separate section: a section could be skipped by
+  // a reader who started at the results, and this cannot.
+  const policy = checkReportPolicy(report);
+  if (!policy.ok) {
+    lines.push(
+      '**This report violates `docs/benchmarks/strategy.md` and must not be published.**',
+      '',
+      `${policy.violations.length} violation(s), each naming the rule it breaks:`,
+      '',
+      ...policy.violations.map((v) => `- \`${v.code}\` — ${v.message}`),
+      '',
+      'The run was still written out in full, including trajectories for every trial,',
+      'because the policy requires that evidence and destroying it to hide a policy',
+      'failure would be the worse outcome. `adze-bench` exits non-zero when this',
+      'section is present.',
+      '',
+    );
+  }
 
   if (report.inputSource === 'synthetic') {
     lines.push(

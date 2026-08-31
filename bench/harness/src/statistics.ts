@@ -114,10 +114,14 @@ export function attemptRate(taskOutcomes: readonly boolean[]): number | null {
  * The intended caller is an artifact-validation step that blocks the report, so that
  * the check runs on the artifact rather than on the author's intent.
  *
- * **That caller does not exist yet.** Nothing in this package calls this function, so
- * this rule is currently enforceable rather than enforced. Wiring it is tracked as the
- * next step for this module; until then, do not read the presence of this function as
- * evidence that a generated report has been checked for it.
+ * **The artifact-validation step now exists, and this check is not in it.**
+ * `checkReportPolicy` in `report-policy.ts` is the caller this function was written
+ * for, and it validates the produced report rather than the author's intent — but it
+ * does not call this function, because `BenchReport` carries no per-attempt rates to
+ * check. `apply-bench` runs each case once, so there is no max to prefer over a mean.
+ * Do not read the presence of this function as evidence that a generated report has
+ * been checked for max-over-N; that begins when a report shape carrying per-attempt
+ * rates exists, and the check is ready for it.
  *
  * Only meaningful when the attempts actually differ: with zero variance the mean and
  * the max coincide and there is nothing to detect, so that case is not an accusation.

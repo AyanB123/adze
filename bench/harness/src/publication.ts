@@ -6,11 +6,19 @@
  * intention one level down: the rules are return values rather than prose, and there
  * is no parameter that relaxes either one.
  *
- * **Not yet wired into the reporter.** `renderReportMarkdown` does not call anything
- * here, and this module is not exported from `src/index.ts`. Every function below is
- * therefore a gate that a caller must choose to pass through, not one the report
- * generator already passes through. That wiring is the next step, and until it lands,
- * the honest description of these two rules is enforceable rather than enforced.
+ * **Partly wired, and the split matters.** `checkCitation` now runs on every report:
+ * `checkReportPolicy` in `report-policy.ts` builds the report's own
+ * `first-party-harness` citation from its harness version and invocation and refuses
+ * a report that cannot cite its own run, and `renderReportMarkdown` calls that gate
+ * rather than offering it as an option. `compareToBaseline` is **not** called, because
+ * a Tier-1 report carries no published baseline to compare against. Calling it on
+ * absent data would manufacture the appearance of enforcement, which is the specific
+ * failure this file's comments have already had to be corrected for once. It activates
+ * when a report shape carrying a baseline exists.
+ *
+ * Nothing here relaxes when it is wired: these functions take no `force`, no
+ * `strict: false`, and no configurable floor, so the gate cannot be widened from a
+ * call site.
  *
  * **Rule 1 — no win claimed inside 3 percentage points.** `compareToBaseline`
  * returns a verdict, and `within-noise` is a verdict rather than a warning. There is
