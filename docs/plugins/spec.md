@@ -177,6 +177,39 @@ Hooks are in the hot path, so `timeoutMs` is enforced. A hook that times out is
 treated as `allow` and logged loudly — failing closed on a slow hook would make
 the agent unusable, and failing silently would hide a broken policy.
 
+### The `edit.pre` payload
+
+Documented in full because the veto surface is the one where an incomplete reading
+produces a policy with a hole in it rather than an error.
+
+| Field | Type | Notes |
+| --- | --- | --- |
+| `path` | `string` | The file the edit targets |
+| `edits` | `{ search, replace }[]` | The search/replace blocks. **Empty for a whole-file write.** |
+| `wholeFile` | `boolean` | True when the call replaces the entire file |
+| `content` | `string?` | The bytes a whole-file write would leave on disk. Present when `wholeFile` is true, **omitted** — not null — otherwise. |
+| `approvedByHuman` | `boolean` | Whether a human already approved this path this turn |
+| `arguments` | `object` | The raw tool arguments at this point in the chain |
+| `sessionId`, `turnId`, `callId` | `string` | Correlation ids |
+
+**A content policy must read `content` as well as `edits[].replace`.** Reading only
+`edits` produces a guard that refuses a credential added by `edit` and allows the
+identical credential written by `write`, because a whole-file write reports
+`edits: []`. That is not hypothetical — it is the bypass `plugins/FINDINGS.md`
+records against an earlier version of this payload, which carried no `content` at
+all, and it is the reason the field exists.
+
+Three shapes reach disk and a policy has to treat them alike: a search/replace edit
+(`edits` populated, `wholeFile` false), a whole-file `write` (`content` set,
+`edits` empty), and an `edit` carrying a whole-file `replacement` (`content` set,
+`edits` possibly empty). Deciding on `edits` alone covers one of the three.
+
+Prefer `path`, `edits`, `wholeFile` and `content` over `arguments`. `arguments` is
+the lower-level escape hatch, and reading tool-specific argument names couples the
+policy to which tool produced the edit — the coupling `edit.pre` exists to remove.
+It is declared, so it is safe to use when a rule genuinely needs something the
+tool-agnostic fields do not carry.
+
 ## Surface 5 — Subagents
 
 ```markdown
