@@ -72,7 +72,7 @@ tokens` is a headline metric rather than a footnote.
 
 | Eval | Size | Purpose |
 | --- | --- | --- |
-| `apply-bench` | ~200 synthetic edits | Highest-frequency regression class. Deterministic, near-free. |
+| `apply-bench` | 51 hand-written edits (`pnpm bench:list` prints the count) | Highest-frequency regression class. Deterministic, near-free. |
 | Aider Polyglot subset | 40 of 225 | Cheapest edit-format signal. Reports `% well formed` **and** pass rate. |
 | SWE-bench smoke slice | fixed 25 | **Wiring check. This number is never published.** |
 | **Leakage assertions** | — | See below. Build failures, not warnings. |
@@ -101,11 +101,15 @@ Each one blocks a specific documented way that agent benchmarks get gamed,
 including accidentally. They run in CI as **build failures** — not as warnings, and
 not as a checklist item someone remembers.
 
-Two of them are asserted today, as ordinary tests in `bench/harness`, which means
-they run on every pull request across all three operating systems. The rest are
-properties of a container and are unimplemented, because there is no container code
-anywhere in `bench/`. The table says which is which, so a reader does not have to
-infer it.
+Three of them are asserted today, as ordinary tests in `bench/harness`, which means
+they run on every pull request across all three operating systems. The other three
+are properties of a container and are unimplemented, because there is no container
+code anywhere in `bench/`. The table says which is which, so a reader does not have
+to infer it.
+
+Three assertions, two functions — which is where the earlier miscount came from.
+`checkPromptLeakage` covers both prompt rows, and `checkHistoryIsolation` covers the
+history row.
 
 | Assertion | Status | Blocks |
 | --- | --- | --- |
@@ -116,7 +120,7 @@ infer it.
 | Grading only on the committed diff, in a fresh container | Not implemented | Monkey-patching the test framework, dropping tests, forcing early exit |
 | Report names every task-defining test | Not implemented | Dropped tests appearing as passes |
 
-The two asserted rows are enforced by `checkPromptLeakage` and
+The three asserted rows are enforced by `checkPromptLeakage` and
 `checkHistoryIsolation` in `bench/harness/src/leakage.ts`. The field guard is
 **default-deny**: only `instance_id`, `repo`, `base_commit` and `problem_statement`
 may reach an agent, so a dataset that adds a solution-bearing column is refused
