@@ -29,6 +29,23 @@ export type {
 } from './case-schema.js';
 export { CaseFormatError, parseCase, parseCaseFile, renderText } from './case-schema.js';
 export type {
+  AgentPrompt,
+  LeakageCheck,
+  LeakageViolation,
+  LeakageViolationCode,
+  RepositoryState,
+  TaskRecord,
+} from './leakage.js';
+export {
+  checkHistoryIsolation,
+  checkPromptLeakage,
+  LeakageError,
+  MIN_LEAKED_LINE_LENGTH,
+  PROMPT_ALLOWED_FIELDS,
+  redactTaskRecord,
+  SOLUTION_BEARING_FIELDS,
+} from './leakage.js';
+export type {
   Baseline,
   Citation,
   CitationCheck,
