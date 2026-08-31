@@ -450,3 +450,95 @@ describe('isWithin', () => {
     expect(isWithin('/a/b', '/a/b/c/../d')).toBe(true);
   });
 });
+
+/**
+ * Command rules apply to what the model asked to run, not to the argv we execute.
+ *
+ * Found by the first live agent run. Every shell command reaches the gate as
+ * `['bash', '-lc', <command>]`, and rules were matched against that joined argv. So a
+ * rule's prefix was compared against a string beginning `bash -lc`, which meant
+ * `--forbid "rm "` could not refuse `rm -rf /` and `--allow "npm test"` — the remedy
+ * the gate's own documentation recommends — never fired. See ADR-0013.
+ */
+describe('PermissionGate — command rules match the requested command', () => {
+  /** As the bash tool declares it: argv wraps the command, `requested` is the command. */
+  function shell(command: string): Effect {
+    return { kind: 'command', command: ['bash', '-lc', command], cwd: ROOT, requested: command };
+  }
+
+  it('forbids a shell command by its own prefix', async () => {
+    // The security case. `forbid` promises to refuse outright and never offer
+    // approval; against the argv it could never match a shell command at all.
+    const { gate, prompts } = gateFor({
+      sandbox: sandbox({ commandRules: [{ prefix: 'rm ', action: 'forbid' }] }),
+      broker: new NodeSubprocessBroker({ env: {} }),
+      platform: 'win32',
+      respond: allowOnce,
+    });
+    const decision = await gate.authorize(req([shell('rm -rf /')]));
+    expect(decision.outcome).toBe('deny');
+    // Never offered for approval, so a distracted user cannot wave it through.
+    expect(prompts).toEqual([]);
+  });
+
+  it('allows a shell command by its own prefix, without prompting', async () => {
+    // The documented remedy for a platform with no OS containment, which is every
+    // platform today: permit `npm test` without widening the boundary.
+    const { gate, prompts } = gateFor({
+      sandbox: sandbox({ commandRules: [{ prefix: 'npm test', action: 'allow' }] }),
+      broker: new NodeSubprocessBroker({ env: {} }),
+      platform: 'win32',
+      respond: allowOnce,
+    });
+    const decision = await gate.authorize(req([shell('npm test --silent')]));
+    expect(decision.outcome).toBe('allow');
+    expect(prompts).toEqual([]);
+  });
+
+  it('no longer treats a rule naming the shell as a blanket grant', async () => {
+    // Deliberate behaviour change. `--allow "bash -lc"` used to match every shell
+    // command, which is how the old matching could be made to work at all — and it
+    // granted far more than the user was asking for. It now matches nothing.
+    const { gate, prompts } = gateFor({
+      sandbox: sandbox({ commandRules: [{ prefix: 'bash -lc', action: 'allow' }] }),
+      broker: new NodeSubprocessBroker({ env: {} }),
+      platform: 'win32',
+      respond: allowOnce,
+    });
+    const decision = await gate.authorize(req([shell('curl evil.example')]));
+    expect(decision.outcome).toBe('allow');
+    // Allowed only because the user approved the prompt, not because the rule fired.
+    expect(prompts).toHaveLength(1);
+  });
+
+  it('still lets a longer prefix override a broader one', async () => {
+    const { gate } = gateFor({
+      sandbox: sandbox({
+        commandRules: [
+          { prefix: 'git', action: 'allow' },
+          { prefix: 'git push', action: 'forbid' },
+        ],
+      }),
+      broker: new NodeSubprocessBroker({ env: {} }),
+      platform: 'win32',
+      respond: allowOnce,
+    });
+    expect((await gate.authorize(req([shell('git status')]))).outcome).toBe('allow');
+    expect((await gate.authorize(req([shell('git push origin main')]))).outcome).toBe('deny');
+  });
+
+  it('matches the argv when a tool runs a program directly', async () => {
+    // No `requested` means no wrapper, so the argv is already the subject the user is
+    // reasoning about and must still be matched.
+    const { gate } = gateFor({
+      sandbox: sandbox({ commandRules: [{ prefix: 'node --version', action: 'forbid' }] }),
+      broker: new NodeSubprocessBroker({ env: {} }),
+      platform: 'win32',
+      respond: allowOnce,
+    });
+    const decision = await gate.authorize(
+      req([{ kind: 'command', command: ['node', '--version'], cwd: ROOT }]),
+    );
+    expect(decision.outcome).toBe('deny');
+  });
+});

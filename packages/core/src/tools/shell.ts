@@ -72,7 +72,14 @@ export function createBashTool(options: BashToolOptions = {}): RegisteredTool {
     effects(args, ctx) {
       const cwd = resolve(ctx.workspaceRoot, args.cwd ?? '.');
       return [
-        { kind: 'command', command: [...shellPrefix, args.command], cwd },
+        {
+          kind: 'command',
+          command: [...shellPrefix, args.command],
+          cwd,
+          // The policy subject. Rules are about what the model asked to run, not
+          // about the shell wrapper we add around it.
+          requested: args.command,
+        },
         // Declared so a working directory outside the workspace is a decision the
         // user makes rather than one the tool takes.
         { kind: 'file-read', path: cwd },

@@ -23,6 +23,7 @@ nobody — including the author — will remember whether an option was consider
 | [0010](0010-ide-fork-strategy.md) | Patch series + Agent Host Protocol, not a merged fork | Accepted |
 | [0011](0011-benchmark-harness.md) | Adopt Harbor; isolate evaluation in two containers | Accepted |
 | [0012](0012-licensing-and-governance.md) | Apache-2.0, DCO, no open-core split | Accepted |
+| [0013](0013-command-rules-match-requested-command.md) | Command rules match the requested command, not the executed argv | Accepted |
 
 ## Statuses
 

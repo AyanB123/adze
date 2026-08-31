@@ -100,7 +100,23 @@ export type ConversationMessage = SystemMessage | UserMessage | AssistantMessage
  * effect list.
  */
 export type Effect =
-  | { readonly kind: 'command'; readonly command: readonly string[]; readonly cwd: string }
+  | {
+      readonly kind: 'command';
+      readonly command: readonly string[];
+      readonly cwd: string;
+      /**
+       * The command as the model asked for it, when `command` wraps it in a shell.
+       *
+       * Command rules match this rather than the argv. A user writing
+       * `--forbid "rm "` means the `rm` the model ran, not the `bash` we chose to run
+       * it with — and matching the argv meant `bash -lc "rm -rf /"` never matched the
+       * rule at all, while `--allow "npm test"` could never fire either.
+       *
+       * Absent when a tool executes a program directly, in which case the argv is
+       * already the subject the user is reasoning about.
+       */
+      readonly requested?: string;
+    }
   | { readonly kind: 'file-read'; readonly path: string }
   | { readonly kind: 'file-write'; readonly path: string }
   | { readonly kind: 'network'; readonly host: string };

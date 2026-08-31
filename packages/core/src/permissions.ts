@@ -341,7 +341,11 @@ export class PermissionGate {
   }
 
   private classifyCommand(effect: Extract<Effect, { kind: 'command' }>): EffectVerdict {
-    const command = effect.command.join(' ');
+    // Rules match what the model asked to run, not the argv we execute. Matching the
+    // argv meant every shell command was tested as `bash -lc ...`, so `--forbid "rm "`
+    // could not block `rm -rf /` and `--allow "npm test"` — the remedy this class
+    // documents above — never fired. See ADR-0013.
+    const command = effect.requested ?? effect.command.join(' ');
     const rule = matchCommandRule(this.sandbox.commandRules, command);
     if (rule !== undefined) {
       switch (rule.action) {
