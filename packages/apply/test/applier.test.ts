@@ -116,6 +116,45 @@ describe('applyEdit — refusals', () => {
     expect(r.message).toContain('anchored');
   });
 
+  it('refuses an over-escaped regex backslash rather than matching it approximately', async () => {
+    // Recorded from a live `adze run` against kimi-k3, which doubled the backslash in a
+    // regex literal: the file holds /^(\d+)/ and the search asked for /^(\\d+)/.
+    //
+    // This is the near-miss where relaxing would be worst. \\d matches a literal
+    // backslash followed by a digit, so a fuzzy match would not be fixing a typo — it
+    // would silently install a different pattern, and the file would still parse. The
+    // model recovered on its own turn from the not-found message, which is the round of
+    // feedback the failure text exists to provide.
+    const original = [
+      'export function parseDuration(text) {',
+      '  const match = /^(\\d+)(s|m|h)$/.exec(text);',
+      '  return Number(match[1]);',
+      '}',
+      '',
+    ].join('\n');
+
+    const r = await applyEdit(
+      req({
+        path: 'src/parse-duration.mjs',
+        original,
+        edits: [
+          {
+            search: '  const match = /^(\\\\d+)(s|m|h)$/.exec(text);',
+            replace:
+              '  const match = /^(\\\\d+)(s|m|h)$/.exec(text);\n  if (match === null) return null;',
+          },
+        ],
+      }),
+    );
+
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('not-found');
+    // Telemetry is the contract, not diagnostics: a refusal has to be attributable to the
+    // tier that diagnosed it for per-tier reporting to mean anything.
+    expect(r.telemetry.tier).toBe('search-replace');
+  });
+
   it('detects a no-op edit', async () => {
     const r = await applyEdit(req({ original: 'a;\n', edits: [{ search: 'a;', replace: 'a;' }] }));
     expect(r.ok).toBe(false);

@@ -113,6 +113,26 @@
       ],
       "expect": { "kind": "refusal", "reason": "ambiguous" },
       "tags": ["refusal", "ambiguity", "sequencing"]
+    },
+    {
+      "id": "not-found-over-escaped-regex-backslash",
+      "description": "Recorded from a live model run against kimi-k3: the model doubled the backslash in a regex literal, searching for /^(\\\\d+)/ where the file has /^(\\d+)/. This is the near-miss where matching approximately would be worst, because \\\\d matches a literal backslash followed by a digit — a different pattern, not a typo of the same one. Refused as not-found, and the model corrected itself on the next turn from the failure message.",
+      "path": "src/parse-duration.mjs",
+      "original": [
+        "export function parseDuration(text) {",
+        "  const match = /^(\\d+)(s|m|h)$/.exec(text);",
+        "  return Number(match[1]);",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "  const match = /^(\\\\d+)(s|m|h)$/.exec(text);",
+          "replace": "  const match = /^(\\\\d+)(s|m|h)$/.exec(text);\n  if (match === null) return null;"
+        }
+      ],
+      "expect": { "kind": "refusal", "reason": "not-found", "tier": "search-replace" },
+      "tags": ["refusal", "not-found", "fuzzy-guard", "model-observed"]
     }
   ]
 }
