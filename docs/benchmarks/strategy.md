@@ -98,29 +98,46 @@ with caveat.
 ## Leakage assertions
 
 Each one blocks a specific documented way that agent benchmarks get gamed,
-including accidentally. When a suite runs them, they run in CI as **build
-failures** — not as warnings, and not as a checklist item someone remembers.
+including accidentally. They run in CI as **build failures** — not as warnings, and
+not as a checklist item someone remembers.
 
-**None of them is implemented yet.** There is no container code anywhere in
-`bench/`, so nothing in this table is currently asserted by anything. They are the
-specification the harness must satisfy before a Tier-2 or Tier-3 number may be
-published, and they are recorded in the imperative because that is the constraint,
-not because the code exists. See M5 in [the roadmap](../roadmap.md). The Tier-1
-suite that does run, `apply-bench`, makes no model calls, opens no network
-connection, and starts no container, so none of these assertions applies to it.
+Two of them are asserted today, as ordinary tests in `bench/harness`, which means
+they run on every pull request across all three operating systems. The rest are
+properties of a container and are unimplemented, because there is no container code
+anywhere in `bench/`. The table says which is which, so a reader does not have to
+infer it.
 
-| Assertion | Blocks |
-| --- | --- |
-| Test patch absent from the agent container | Agent reading the tests it must pass |
-| Gold-patch fields never reach the prompt | Pre-solved localization, worth 10–20 points |
-| Future git history deleted in the agent container | `git log` finding the upstream fix |
-| Network egress blocked | Fetching the solution — a documented real incident |
-| Grading only on the committed diff, in a fresh container | Monkey-patching the test framework, dropping tests, forcing early exit |
-| Report names every task-defining test | Dropped tests appearing as passes |
+| Assertion | Status | Blocks |
+| --- | --- | --- |
+| Gold-patch fields never reach the prompt | **Asserted** | Pre-solved localization, worth 10–20 points |
+| Test patch absent from the agent payload | **Asserted** | Agent reading the tests it must pass |
+| Future git history unreachable in the agent repository | **Asserted** | `git log` finding the upstream fix |
+| Network egress blocked | Not implemented | Fetching the solution — a documented real incident |
+| Grading only on the committed diff, in a fresh container | Not implemented | Monkey-patching the test framework, dropping tests, forcing early exit |
+| Report names every task-defining test | Not implemented | Dropped tests appearing as passes |
 
-The two-container design is what will make most of these structural rather than
-policed: the agent commits, and **only the diff crosses** into a clean verifier.
-That design is the reason the list is short, and it is also unbuilt.
+The two asserted rows are enforced by `checkPromptLeakage` and
+`checkHistoryIsolation` in `bench/harness/src/leakage.ts`. The field guard is
+**default-deny**: only `instance_id`, `repo`, `base_commit` and `problem_statement`
+may reach an agent, so a dataset that adds a solution-bearing column is refused
+rather than silently passed. Alongside it a content detector looks for verbatim gold
+or test-patch lines inside the prompt text, which is a weaker check by construction —
+it names the fields it knows to carry solutions and only finds verbatim overlap, so a
+clean result is not proof of no leakage.
+
+The history assertion requires that nothing outside the base commit's history be
+reachable from any ref, rather than checking commit dates, because a leftover tag or
+sibling branch carrying the fix is exactly as reachable as a descendant. A pass
+proves the fix cannot be found by walking refs; it does not prove the object database
+holds no unreachable future objects.
+
+The two-container design is what will make most of the remaining rows structural
+rather than policed: the agent commits, and **only the diff crosses** into a clean
+verifier. That design belongs to Harbor — [ADR-0011](../architecture/adr/0011-benchmark-harness.md)
+rejects building our own harness — and it is not wired up yet. See M5 in
+[the roadmap](../roadmap.md). The Tier-1 suite that does run, `apply-bench`, makes no
+model calls, opens no network connection and starts no container, so the container
+rows do not apply to it.
 
 ---
 

@@ -31,11 +31,11 @@ were run afterwards on the same tree.
 | `@adze/sdk` | Landed | typecheck clean · 63 tests · lint clean |
 | `apps/vscode` | Landed, **unpublished** | typecheck clean · 125 tests · lint clean |
 | `plugins/` (8 first-party) | Landed | 201 tests · lint clean |
-| `bench/harness` | Landed | 96 tests · lint clean |
+| `bench/harness` | Landed | 116 tests · lint clean |
 | `apps/ide` | **Empty** | no source; M4 has not started |
 | `apps/hub` | **Empty** | no source |
 
-1,975 tests pass, with zero lint errors and zero lint warnings across 342 files.
+1,995 tests pass, with zero lint errors and zero lint warnings across 344 files.
 Six tests are skipped, and both groups are conditional rather than broken: two in
 `@adze/retrieval` require tree-sitter grammar binaries, and four in
 `@adze/sandbox` are the real-containment tests, which need a host that actually
@@ -245,9 +245,9 @@ containerized has been built.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
-| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, report rendering, and the publication gate landed (96 tests). Harbor adapters are **not** built. |
+| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, report rendering, the publication gate, and the payload and history leakage assertions landed (116 tests). Harbor adapters are **not** built. |
 | Two-container isolation | ⬜ Not started | No container code exists anywhere in `bench/`. |
-| Leakage assertions | ⬜ Not started | Test-patch, gold-patch-field, future-history, and network-isolation assertions are **not implemented**, so they are not yet the build failures the policy requires. |
+| Leakage assertions | 🚧 Partly landed | Gold-patch-field, test-patch and future-history absence are asserted today by `checkPromptLeakage` and `checkHistoryIsolation`, as ordinary tests, so they are build failures on all three operating systems. The field guard is default-deny, so a dataset that adds a solution-bearing column is refused rather than passed. Network isolation and diff-only grading are **not implemented**: they are properties of a container, and the containers belong to Harbor. |
 | Tier 1 / 2 / 3 pipelines | 🚧 Tier 1 only | Tiers 2 and 3 need the container work above. |
 | Report format | 🚧 Partly landed | `report.md` genuinely emits limitations first, and that is reachable and tested: the limitations section is index 0, and a test compares its position against the first percentage in the rendered output. So it is a property of the generator rather than of the author. |
 | Publication gates | 🚧 Partly enforced | `checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be rendered without passing through it, and `adze-bench` exits 3 on a violation. A violating run is still written in full, because trajectories are required evidence and destroying them to hide a policy failure would be worse — the violation is printed into the report above every number instead. **Enforced:** report integrity (a headline that disagrees with the case outcomes; a severe-failure list that hides a case which applied when a refusal was required), the deterministic-versus-stochastic distinction (a non-deterministic suite reporting fewer than three attempts is refused), model-pin honesty, and that a report can cite its own run. **Not enforced:** the three-point comparison rule and the max-over-N detector — implemented and tested, but a Tier-1 report has no baseline and runs each case once, so calling them would evaluate absent data and look like enforcement while being none. They activate with the first report carrying a baseline or per-attempt rates. |
