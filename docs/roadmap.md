@@ -21,7 +21,7 @@ were run afterwards on the same tree.
 | --- | --- | --- |
 | `@adze/protocol` | Landed | typecheck clean · 72 tests · lint clean |
 | `@adze/core` | Landed | typecheck clean · 308 tests · lint clean |
-| `@adze/apply` | Landed | typecheck clean · 63 tests · lint clean |
+| `@adze/apply` | Landed | typecheck clean · 64 tests · lint clean |
 | `@adze/providers` | Landed | typecheck clean · 135 tests · lint clean |
 | `@adze/retrieval` | Landed, vectors deferred | typecheck clean · 250 tests, 2 skipped · lint clean |
 | `@adze/sandbox` | Landed, **no Windows containment** | typecheck clean · 291 tests, 4 skipped · lint clean |
@@ -35,7 +35,7 @@ were run afterwards on the same tree.
 | `apps/ide` | **Empty** | no source; M4 has not started |
 | `apps/hub` | **Empty** | no source |
 
-1,995 tests pass, with zero lint errors and zero lint warnings across 344 files.
+1,996 tests pass, with zero lint errors and zero lint warnings across 344 files.
 Six tests are skipped, and both groups are conditional rather than broken: two in
 `@adze/retrieval` require tree-sitter grammar binaries, and four in
 `@adze/sandbox` are the real-containment tests, which need a host that actually
@@ -76,11 +76,16 @@ recorded here rather than left to be discovered.
    is missing, is refused. The three-point rule is implemented and tested but not
    yet called, because a Tier-1 report carries no baseline to compare against; it
    activates with the first report that has one. See M5.
-3. **No live end-to-end run has been verified against a real model.** The path
-   from prompt through the turn machine to a provider HTTP request is exercised
-   and its failure handling is verified, but nobody has yet watched
-   `adze run` complete a task with a valid API key. Until someone has, M1's exit
-   criterion is unmet.
+3. **The live end-to-end run has been demonstrated once, on one model.** On
+   2026-08-30 `adze run "fix the failing test"` completed a task in a scratch git
+   repository against `kimi-k3` through an OpenAI-compatible endpoint: seven steps,
+   39 seconds, stop reason `end-turn`, and a correct one-line fix that made a
+   genuinely failing test pass. That closes M1's exit criterion, which had been the
+   one thing standing between M1 and closed. Read the scope precisely — **one task,
+   one model, one platform.** It is evidence that the assembled path works, not a
+   measurement of how often it works, and no pass rate should be inferred from it.
+   Nothing has been run against a paid frontier model, and the run happened outside
+   this repository rather than against Adze's own source.
 
 ---
 
@@ -125,14 +130,39 @@ from whatever got built.
 
 ---
 
-## M1 — Engine and CLI — substantially complete, exit criterion unmet
+## M1 — Engine and CLI — complete
 
 **Goal: `adze "fix the failing test"` works end to end in a real repository.**
 
+Demonstrated on 2026-08-30. In a scratch git repository holding a duration parser
+that threw on unparseable input instead of returning `null`, `adze run "fix the
+failing test"` reached `end-turn` in seven steps and 39 seconds against `kimi-k3`
+over an OpenAI-compatible endpoint, and added the one-line guard that made the test
+pass. The exact prompt was the goal sentence above, unedited.
+
+Three things in that run are worth recording, because they are the first evidence
+any of them works outside a test:
+
+- **The permission gate refused a command and the agent adapted.** With
+  `--approval never` and no OS-level containment on Windows, the gate denied `bash`
+  rather than escalating, and the agent completed the task using the built-in
+  `glob`, `read` and `edit` tools instead. A refusal being survivable rather than
+  fatal is the behaviour ADR-0007 is built around.
+- **The applier refused a bad edit and the model recovered from the message.** The
+  model doubled a backslash inside a regex literal, searching for `/^(\\d+)/` where
+  the file holds `/^(\d+)/`. All four strategies missed, the edit was refused as
+  `not-found`, and the model fixed its own search block on the next turn. That is
+  the round of feedback `CONTRIBUTING.md` calls the highest-value intervention in
+  the loop, working on a real model for the first time. It is now a permanent
+  regression case in both `packages/apply/test/` and `apply-bench`.
+- **Cost reported `unknown` rather than zero,** because this model has no prices in
+  the catalog. Cache accounting worked: 77% hit rate over 21,356 tokens.
+
+**Scope, stated so it is not overread:** one task, one model, one platform. This is
+evidence that the path works, not a measurement of how often it does.
+
 Every deliverable below has landed, including the sandbox on the platforms where
-containment is possible. The goal above has *not* been demonstrated, because no
-one has yet run the CLI to completion against a real model with a valid key. The
-milestone therefore stays open.
+containment is possible.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
@@ -143,14 +173,17 @@ milestone therefore stays open.
 | `@adze/retrieval` | ✅ Landed | ripgrep + tree-sitter symbols + RRF fusion. Vectors deferred. |
 | `@adze/sandbox` | ✅ Landed, Windows excepted | Seatbelt, bubblewrap, opt-in Docker report `os-level`. Windows reports `gate-only` and confines nothing. Syscall surface unrestricted everywhere. |
 | `@adze/cli` | ✅ Landed | `run`, `chat`, `apply`, `validate`, `doctor`, `models` |
-| `bench/suites/apply-bench` | ✅ Landed | 50/50 cases pass; wired into CI |
+| `bench/suites/apply-bench` | ✅ Landed | 51/51 cases pass; wired into CI |
 
 **Done when:** the CLI completes a multi-step task in a real repository, every
 tool call passes the gate, and `apply-bench` runs on every PR.
 
-Of those three, the second and third hold. The first is unverified — that is the
-one thing standing between M1 and closed, and it needs a human with an API key
-rather than more code.
+All three now hold. The third has held since `apply-bench` was wired into CI, the
+second is asserted by the gate coverage tests and was then observed refusing a real
+command in the live run, and the first was demonstrated on 2026-08-30 as described
+above. What remains open is breadth rather than the criterion: one task on one model
+is not a measurement, and the next useful evidence is the same run against a paid
+frontier model and against Adze's own repository rather than a scratch one.
 
 **Explicitly deferred:** TUI (plain output first keeps it scriptable), vector
 search, plugins. Subagents are partly here — the built-in `task` tool and the
@@ -238,7 +271,7 @@ merge bot has tracked upstream for four consecutive weekly releases unattended.
 
 Runs in parallel with M1–M2, not after.
 
-Tier 1 is live: `apply-bench` runs on every pull request, passes 50/50 cases, and
+Tier 1 is live: `apply-bench` runs on every pull request, passes 51/51 cases, and
 uploads its run directory as an artifact. It is deterministic and free — no model
 calls, no network, no container — which is also the limit of what exists. Nothing
 containerized has been built.
