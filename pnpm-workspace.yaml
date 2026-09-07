@@ -31,9 +31,9 @@ catalog:
 
   # --- Dev ---
   typescript: ^7.0.2
-  "@types/node": ^26.4.0
+  "@types/node": ^26.4.1
   "@types/picomatch": ^4.0.3
-  "@biomejs/biome": ^2.5.11
+  "@biomejs/biome": ^2.5.12
   vitest: ^4.1.11
   "@vitest/coverage-v8": ^4.1.11
   tsup: ^8.5.1
