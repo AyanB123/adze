@@ -82,10 +82,13 @@ a case written to exercise indentation tolerance silently stops testing that the
 moment matching changes — it will still pass on the output alone. The same goes for
 `expect.tier` and `expect.validator`.
 
-**`expect.validator` asserts evidence, not success.** `structural` means the
-delimiter-and-indentation check ran; `none` means the language was unknown and
-nothing was checked at all. A case asserting `none` is asserting that we declined
-to guess.
+**`expect.validator` asserts evidence, not success.** `tree-sitter` means a real
+parse ran; `structural` means the delimiter-and-indentation check ran; `none`
+means the language was unknown and nothing was checked at all. A case asserting
+`none` is asserting that we declined to guess. A case pinning `tree-sitter` only
+passes where a compiled grammar is present (`$ADZE_GRAMMAR_DIR`, else
+`<root>/.adze/grammars`), so cases that must hold on a fresh clone leave
+`validator` unset and pass under whichever level ran.
 
 ### To assert a refusal instead of an output
 

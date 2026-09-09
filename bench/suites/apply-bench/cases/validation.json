@@ -218,6 +218,29 @@
         "validator": "none"
       },
       "tags": ["validation", "honesty"]
+    },
+    {
+      "id": "typescript-type-error-still-applies",
+      "description": "A type error is not a syntax error: a real parse accepts what it cannot judge, so a semantically wrong but well-formed edit must apply. Guards the tree-sitter validation path against rejecting what a parser cannot decide. No validator is pinned, so this holds whichever level ran.",
+      "path": "src/typed.ts",
+      "original": ["const n: number = 1;", ""],
+      "edits": [{ "search": "const n: number = 1;", "replace": "const n: number = \"oops\";" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const n: number = \"oops\";", ""]
+      },
+      "tags": ["validation", "tree-sitter-guard", "false-positive-guard"],
+      "source": "plan P1.1: tree-sitter validation rejects only on error and missing nodes"
+    },
+    {
+      "id": "go-unclosed-brace-refused",
+      "description": "A Go edit that drops a closing brace. Both the structural checker and a real parse refuse it, so this pins the refusal through the async validation path with no validator assertion — it must hold whichever level ran.",
+      "path": "cmd/main.go",
+      "original": ["package main", "", "func main() {", "  println(\"a\")", "}", ""],
+      "edits": [{ "search": "  println(\"a\")\n}", "replace": "  println(\"a\")" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["validation", "go", "safety"],
+      "source": "plan P1.1: a refusal must survive the async validation path"
     }
   ]
 }
