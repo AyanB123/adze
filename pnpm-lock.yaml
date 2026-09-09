@@ -123,6 +123,9 @@ importers:
       '@adze/apply':
         specifier: workspace:*
         version: link:../../packages/apply
+      '@adze/retrieval':
+        specifier: workspace:*
+        version: link:../../packages/retrieval
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

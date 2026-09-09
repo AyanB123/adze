@@ -29,6 +29,16 @@ export type {
   LoadedCase,
 } from './case-schema.js';
 export { CaseFormatError, parseCase, parseCaseFile, renderText } from './case-schema.js';
+export type { IndexQuery, IndexSuiteOptions } from './index-bench.js';
+export {
+  countFixtureFiles,
+  fixtureDigest,
+  IndexCaseFormatError,
+  matchedAtK,
+  parseQueriesFile,
+  precisionAtK,
+  runIndexSuite,
+} from './index-bench.js';
 export type {
   AgentPrompt,
   LeakageCheck,
@@ -80,7 +90,14 @@ export type {
   ReportPolicyCheck,
 } from './report-policy.js';
 export { checkReportPolicy, HARNESS_CITATION_NAME, harnessCitation } from './report-policy.js';
-export type { BenchReport, Breakdown, CaseOutcome, CaseResult } from './report-schema.js';
+export type {
+  BenchReport,
+  Breakdown,
+  CaseOutcome,
+  CaseResult,
+  FixtureRecord,
+  IndexMetrics,
+} from './report-schema.js';
 export {
   addToBreakdown,
   emptyBreakdown,

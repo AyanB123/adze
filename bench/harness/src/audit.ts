@@ -71,6 +71,34 @@ function brokenTaskAudit(report: BenchReport): string[] {
     ];
   }
 
+  if (report.suite === 'index-bench') {
+    return [
+      '## Broken-task audit — not applicable',
+      '',
+      'The policy requires our own broken-task audit of the benchmark being reported on,',
+      'because roughly a third of the "hardest" tasks in circulation are broken rather',
+      'than hard. That rule is about **borrowed** task sets: an upstream dataset whose',
+      'tests do not check what its task description claims.',
+      '',
+      `This suite borrows nothing. Its ${report.totals.cases} queries and its fixture files`,
+      'are hand-written in this repository — each query names the symbol and the fixture',
+      'paths expected to contain it. There is no upstream author to disagree with and no',
+      'gold patch to verify, so there is no third-party task set to audit. A query that',
+      'asserts the wrong file is a bug here, fixed by editing the query, rather than a',
+      'dataset defect to be measured and then worked around.',
+      '',
+      '### What stands in for it',
+      '',
+      'The failure a broken-task audit catches is a task that passes for the wrong reason.',
+      'Its form here is an ambiguous query: a symbol name appearing in so many fixture',
+      'files that finding an expected one proves nothing about lookup. The committed',
+      'queries use distinctive names with one or two expected files each, and every',
+      'trajectory beside this file records the full returned path list, so a query that',
+      'passed while returning the whole fixture would be visible in the artifact.',
+      '',
+    ];
+  }
+
   return [
     '## Broken-task audit — not applicable',
     '',
@@ -124,22 +152,34 @@ function leakageAssertions(report: BenchReport): string[] {
     '',
     '| Assertion | This run | Why |',
     '| --- | --- | --- |',
-    '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are hand-written edits held in memory. |',
-    '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
-    '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. The applier is handed file contents, not a checkout. |',
-    '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
-    "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned string to the case's own expectation. |",
-    '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each case carries its own expectation. |',
+    ...(report.suite === 'index-bench'
+      ? [
+          '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are hand-written queries against a checked-in fixture. |',
+          '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
+          '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. Retrieval searches a temp copy of the fixture, not a checkout with history. |',
+          '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
+          "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned paths to the query's own expected paths. |",
+          '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each query carries its own expected paths. |',
+        ]
+      : [
+          '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are hand-written edits held in memory. |',
+          '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
+          '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. The applier is handed file contents, not a checkout. |',
+          '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
+          "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned string to the case's own expectation. |",
+          '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each case carries its own expectation. |',
+        ]),
     '',
     '**The three that are implemented.** `checkPromptLeakage` and',
     '`checkHistoryIsolation` in `bench/harness/src/leakage.ts` cover the first three',
     'rows, and are exercised by unit tests over fixtures: a SWE-bench-shaped record for',
     'the payload rows, and a real git repository built per test for the history row. A',
     'regression in either fails the build. What no benchmark run does is pass its own',
-    'data through them — `runner.ts` does not import `leakage.ts`, because this suite has',
-    'no record, no payload and no repository to pass. Calling them from a run that has',
-    'none of those would return clean every time, which would read as enforcement while',
-    'checking nothing. They begin to apply with the first adapter that prepares a task',
+    'data through them — `runner.ts` does not import `leakage.ts` (and neither does',
+    '`index-bench.ts`), because no committed suite has a record, a payload, or a',
+    'repository with history to pass. Calling them from a run that has none of those',
+    'would return clean every time, which would read as enforcement while checking',
+    'nothing. They begin to apply with the first adapter that prepares a task',
     'from a dataset.',
     '',
     '**The other three.** Unimplemented, and properties of a container rather than of',
@@ -175,6 +215,16 @@ function refusalReasons(report: BenchReport): string[] {
 }
 
 function validatorLevels(report: BenchReport): string[] {
+  if (report.suite === 'index-bench') {
+    return [
+      '### Validator levels that actually ran',
+      '',
+      'Not applicable — validator levels describe `@adze/apply`, and a retrieval run',
+      'records no applier telemetry rather than zeros. This run says nothing about any',
+      'validator level either way.',
+      '',
+    ];
+  }
   const observed = Object.keys(report.byValidator).sort();
   const rows: string[] = [];
   for (const level of observed) {
@@ -207,6 +257,16 @@ function validatorLevels(report: BenchReport): string[] {
 }
 
 function severeFailures(report: BenchReport): string[] {
+  if (report.suite === 'index-bench') {
+    return [
+      '### Applied when a refusal was required',
+      '',
+      'Not applicable — retrieval has no refusal semantics. A query that finds nothing',
+      'is a miss (`wrong-output`), not a refusal, so this applier corruption class has',
+      'no meaning here.',
+      '',
+    ];
+  }
   const severe = report.severeFailures;
   if (severe.length === 0) {
     return [
@@ -272,6 +332,19 @@ export function renderAuditMarkdown(report: BenchReport): string {
     `| Model pins | ${report.models.length === 0 ? 'none recorded' : report.models.join(', ')} |`,
     `| Attempts per case | ${report.attempts} |`,
     `| Harness version | \`${report.harnessVersion}\` |`,
+    ...(report.fixture === undefined
+      ? []
+      : [
+          `| Fixture digest | \`${report.fixture.digest.slice(0, 16)}…\` (${report.fixture.files} files, ${report.fixture.bytes} bytes) |`,
+        ]),
+    ...(report.resourceBand === undefined ? [] : [`| Resource band | ${report.resourceBand} |`]),
+    ...(report.metrics === undefined
+      ? []
+      : [
+          `| Cold index | ${report.metrics.coldIndexMs.toFixed(1)} ms |`,
+          `| Incremental | ${report.metrics.incrementalMs.toFixed(1)} ms |`,
+          `| Mean precision@k | ${(report.metrics.meanPrecisionAtK * 100).toFixed(1)}% |`,
+        ]),
     '',
   ]);
 

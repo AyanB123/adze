@@ -218,9 +218,16 @@ describe('D12 — the dependency rules are tested, not only reviewed', () => {
     }
   });
 
-  it('bench reaches product code only through apply', async () => {
+  it('bench reaches product code only through apply and retrieval', async () => {
+    // Tier 1.5 added `index-bench`, which measures `@adze/retrieval` locally
+    // (ripgrep latency, cold/incremental timing, precision@k). The dependency
+    // still runs one way — bench imports product code, never the reverse — and
+    // service packages still must not import each other; this is the only
+    // package allowed two product imports, because it is the only one that
+    // measures two layers. Refs ADR-0011, plan Tier 1.5.
+    const allowed = new Set(['@adze/apply', '@adze/retrieval']);
     const offenders = adzeImports(await importSpecifiers(srcDir('bench', 'harness'))).filter(
-      (entry) => entry.specifier !== '@adze/apply',
+      (entry) => !allowed.has(entry.specifier),
     );
     expect(offenders).toEqual([]);
   });
@@ -374,17 +381,22 @@ describe('leakage assertions are tested, exported, and intentionally unwired', (
     expect(test).toContain('checkHistoryIsolation');
   });
 
-  it('no run invokes them, because the committed suite has no input to check', async () => {
+  it('no run invokes them, because the committed suites have no input to check', async () => {
     // P1.3, encoded so the fifth audit does not re-wire it by accident. Calling
     // either function from `runSuite` — hand-written edits in memory, no task
     // record, no payload, no checkout — would return clean on every run: the
-    // appearance of enforcement without the substance. The wiring belongs in the
-    // first adapter that prepares a task from a dataset, where the payload is
+    // appearance of enforcement without the substance. The same holds for
+    // `runIndexSuite`: hand-written queries against a fixture copy, still no
+    // record, no payload, and no repository with history. The wiring belongs in
+    // the first adapter that prepares a task from a dataset, where the payload is
     // built and before it is handed over.
     const runner = stripComments(await readRepo('bench', 'harness', 'src', 'runner.ts'));
     expect(runner).not.toContain('leakage');
     expect(runner).not.toContain('checkPromptLeakage');
     expect(runner).not.toContain('checkHistoryIsolation');
+    const indexBench = stripComments(await readRepo('bench', 'harness', 'src', 'index-bench.ts'));
+    expect(indexBench).not.toContain('checkPromptLeakage');
+    expect(indexBench).not.toContain('checkHistoryIsolation');
     const leakage = await readRepo('bench', 'harness', 'src', 'leakage.ts');
     expect(leakage).toContain('does not import');
   });

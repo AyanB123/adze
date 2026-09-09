@@ -21,6 +21,7 @@
  */
 
 import { mkdir, writeFile } from 'node:fs/promises';
+import { cpus, totalmem } from 'node:os';
 import { join } from 'node:path';
 import { renderAuditMarkdown } from './audit.js';
 import { renderReportMarkdown } from './report.js';
@@ -34,6 +35,25 @@ export function runStamp(now: Date = new Date()): string {
 /** Filesystem-safe form of a case id, so a trajectory filename is predictable. */
 function safeId(id: string): string {
   return id.replace(/[^a-zA-Z0-9._-]+/g, '_');
+}
+
+/** Best-effort machine record. Never throws: a counter that failed must not fail the run. */
+function machineRecord(): {
+  readonly cpus: number;
+  readonly model: string;
+  readonly totalMemoryMb: number;
+} {
+  try {
+    const cores = cpus();
+    const first = cores[0];
+    return {
+      cpus: cores.length,
+      model: (first?.model ?? 'unknown').trim().slice(0, 120),
+      totalMemoryMb: Math.round(totalmem() / 1024 / 1024),
+    };
+  } catch {
+    return { cpus: 0, model: 'unknown', totalMemoryMb: 0 };
+  }
 }
 
 export interface WrittenRun {
@@ -65,15 +85,22 @@ export async function writeRun(outcome: RunOutcome, dir: string): Promise<Writte
         reportSchemaVersion: outcome.report.schemaVersion,
         invocation: outcome.report.invocation,
         environment: outcome.report.environment,
+        // Latency is not comparable across machines, so the machine travels with
+        // the numbers. Best-effort and local-only: model names vary by host, and
+        // a counter that failed to read must not fail the run.
+        machine: machineRecord(),
         inputSource: outcome.report.inputSource,
         models: outcome.report.models,
         attempts: outcome.report.attempts,
         deterministic: outcome.report.deterministic,
         // Stated rather than omitted. A reader comparing this to a Tier-2 report
         // needs to know these were not pinned, not to guess that they were.
+        // `index-bench` overwrites the resource band below with its own scale.
         containerDigest: null,
-        resourceBand: null,
+        resourceBand: outcome.report.resourceBand ?? null,
         seeds: null,
+        ...(outcome.report.fixture === undefined ? {} : { fixture: outcome.report.fixture }),
+        ...(outcome.report.metrics === undefined ? {} : { metrics: outcome.report.metrics }),
       },
       null,
       2,

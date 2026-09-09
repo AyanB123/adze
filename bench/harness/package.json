@@ -19,7 +19,8 @@
     "clean": "node -e \"require('node:fs').rmSync('dist',{recursive:true,force:true})\""
   },
   "dependencies": {
-    "@adze/apply": "workspace:*"
+    "@adze/apply": "workspace:*",
+    "@adze/retrieval": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",

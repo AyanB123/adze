@@ -80,6 +80,41 @@ export interface Breakdown {
   readonly passRate: number | null;
 }
 
+/**
+ * Local retrieval measurements carried by `index-bench` reports.
+ *
+ * All latencies are wall-clock milliseconds on the run's own machine, recorded
+ * beside the machine and fixture digest that make them interpretable — and not
+ * comparable across machines. Only `index-bench` sets this; every other suite
+ * omits it rather than reporting zeros.
+ */
+export interface IndexMetrics {
+  /** Fresh provider over the fixture copy: `listFiles` plus the first query pass. */
+  readonly coldIndexMs: number;
+  /** One query re-run after appending a comment line to a single fixture file. */
+  readonly incrementalMs: number;
+  /** Mean `provider.search` wall clock across queries. */
+  readonly meanQueryMs: number;
+  /** Mean direct `ripgrepSearch` wall clock across queries. */
+  readonly meanRipgrepMs: number;
+  /** Mean precision@k across queries. */
+  readonly meanPrecisionAtK: number;
+  /** `process.memoryUsage().rss` after the query pass, in MiB. */
+  readonly peakMemoryMb: number;
+}
+
+/**
+ * What the retrieval numbers were measured against.
+ *
+ * The digest is sha256 over the sorted fixture paths and their bytes, so a
+ * report can be tied to the exact fixture it ran. Only `index-bench` sets this.
+ */
+export interface FixtureRecord {
+  readonly digest: string;
+  readonly files: number;
+  readonly bytes: number;
+}
+
 export interface BenchReport {
   readonly schemaVersion: number;
   readonly suite: string;
@@ -142,6 +177,22 @@ export interface BenchReport {
    */
   readonly severeFailures: readonly CaseResult[];
   readonly results: readonly CaseResult[];
+
+  /**
+   * Local retrieval measurements. Set only by `index-bench`; every other suite
+   * omits it. Optional so the Tier-1 applier reports keep their exact shape —
+   * a field of zeros on a suite that measured no latency would read as a
+   * measurement and is worse than an absent field.
+   */
+  readonly metrics?: IndexMetrics;
+  /** What the retrieval numbers were measured against. Set only by `index-bench`. */
+  readonly fixture?: FixtureRecord;
+  /**
+   * The scale the latency numbers belong to, e.g. `small-scale local: 11 files`.
+   * Latency is not comparable across machines or scales, so the band travels
+   * with the numbers. Set only by `index-bench`.
+   */
+  readonly resourceBand?: string;
 }
 
 export function emptyBreakdown(): Breakdown {

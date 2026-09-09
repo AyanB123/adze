@@ -1,0 +1,76 @@
+{
+  "queries": [
+    {
+      "id": "idx-authenticate",
+      "description": "Symbol lookup for the auth entry point, expected in two files.",
+      "query": "authenticate",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["src/auth.ts", "src/server.ts"],
+      "tags": ["symbol", "typescript"]
+    },
+    {
+      "id": "idx-save-config",
+      "description": "Unique config writer symbol, expected in exactly one file.",
+      "query": "saveConfig",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["src/config.ts"],
+      "tags": ["symbol", "typescript"]
+    },
+    {
+      "id": "idx-read-through",
+      "description": "Unique store helper, expected in exactly one file.",
+      "query": "readThrough",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["src/store.ts"],
+      "tags": ["symbol", "typescript"]
+    },
+    {
+      "id": "idx-check-permission",
+      "description": "Python permission helper, expected in exactly one file.",
+      "query": "check_permission",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["app/users.py"],
+      "tags": ["symbol", "python"]
+    },
+    {
+      "id": "idx-cache-put",
+      "description": "Python cache writer, expected in exactly one file.",
+      "query": "cache_put",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["app/cache.py"],
+      "tags": ["symbol", "python"]
+    },
+    {
+      "id": "idx-handle-health",
+      "description": "Go health handler, expected in exactly one file.",
+      "query": "handleHealth",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["pkg/server.go"],
+      "tags": ["symbol", "go"]
+    },
+    {
+      "id": "idx-backoff",
+      "description": "Rust backoff helper, expected in exactly one file.",
+      "query": "backoff_ms",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["src/net.rs"],
+      "tags": ["symbol", "rust"]
+    },
+    {
+      "id": "idx-handle-request",
+      "description": "Request handler wiring auth to the server, expected in exactly one file.",
+      "query": "handleRequest",
+      "mode": "literal",
+      "k": 5,
+      "expectedPaths": ["src/server.ts"],
+      "tags": ["symbol", "typescript"]
+    }
+  ]
+}

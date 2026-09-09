@@ -33,6 +33,7 @@
     "adze": "node packages/cli/bin/adze.mjs",
     "bench:apply": "node bench/harness/bin/adze-bench.mjs apply",
     "bench:polyglot": "node bench/harness/bin/adze-bench.mjs apply --suite polyglot-bench",
+    "bench:index": "node bench/harness/bin/adze-bench.mjs index",
     "bench:list": "node bench/harness/bin/adze-bench.mjs list",
     "gallery:audit": "node scripts/audit-gallery-recommendations.mjs",
     "licenses:check": "node scripts/check-licenses.mjs",

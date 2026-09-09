@@ -3,7 +3,7 @@
  * `adze-bench` — the benchmark entry point.
  *
  * Wired to the root scripts `bench:apply`, `bench:polyglot`, `bench:index`,
- * `bench:swe-smoke`, and `bench:list`.
+ * and `bench:list`.
  *
  * Argument parsing is hand-rolled rather than using commander, so that `bench/`
  * carries no dependency the product does not already have. Two subcommands and four
@@ -38,12 +38,14 @@ const harness = await import(pathToFileURL(entry).href);
 const USAGE = `adze-bench — Adze benchmark runner
 
 Usage:
-  adze-bench apply [options]     run a Tier-1 suite (default: apply-bench)
+  adze-bench apply [options]     run an edit-format Tier-1 suite (default: apply-bench)
+  adze-bench index [options]     run the local retrieval suite (index-bench)
   adze-bench list  [options]     list cases without running them
 
 Options:
-  --suite <name>   suite under bench/suites (default: apply-bench;
-                   polyglot-bench, index-bench, swe-smoke also run here)
+  --suite <name>   suite under bench/suites (default: apply-bench for apply/list,
+                   index-bench for index; polyglot-bench, swe-smoke also run
+                   under apply)
   --filter <text>  only cases whose id, tag, or description contains <text>
   --out <dir>      write the run here (default: bench/.runs/<stamp>-<suite>)
   --no-write       run and print, write nothing
@@ -68,7 +70,7 @@ function applyFlag(args, arg, value) {
 function parseArgs(argv) {
   const args = {
     command: undefined,
-    suite: 'apply-bench',
+    suite: undefined,
     filter: undefined,
     out: undefined,
     write: true,
@@ -119,7 +121,124 @@ if (args.command === 'help' || args.command === undefined) {
   process.exit(args.command === undefined ? 2 : 0);
 }
 
-const suiteDir = join(repoRoot, 'bench', 'suites', args.suite);
+function defaultSuite(command) {
+  if (command === 'index') return 'index-bench';
+  return 'apply-bench';
+}
+
+const suiteName = args.suite ?? defaultSuite(args.command);
+const suiteDir = join(repoRoot, 'bench', 'suites', suiteName);
+
+if (args.command === 'index') {
+  await runIndexCommand();
+  process.exit(process.exitCode ?? 0);
+}
+
+async function runIndexCommand() {
+  const { readFile } = await import('node:fs/promises');
+  let queries;
+  try {
+    const text = await readFile(join(suiteDir, 'cases', 'queries.json'), 'utf8');
+    queries = harness.parseQueriesFile(text, 'queries.json');
+  } catch (error) {
+    process.stderr.write(`adze-bench: ${error.message}\n`);
+    process.exit(2);
+  }
+  const filtered = queries.filter((q) => matches(q, args.filter));
+  if (filtered.length === 0) {
+    process.stderr.write(
+      `adze-bench: no queries matched${args.filter === undefined ? '' : ` filter '${args.filter}'`}\n`,
+    );
+    process.exit(2);
+  }
+  const invocation = ['node', 'bench/harness/bin/adze-bench.mjs', ...process.argv.slice(2)].join(
+    ' ',
+  );
+  const outcome = await harness.runIndexSuite(filtered, {
+    fixtureDir: join(suiteDir, 'fixture'),
+    invocation,
+  });
+  await finishRun(outcome, suiteName);
+}
+
+async function finishRun(outcome, suite) {
+  let written;
+  if (args.write) {
+    const dir =
+      args.out === undefined
+        ? join(repoRoot, 'bench', '.runs', `${harness.runStamp()}-${suite}`)
+        : resolve(args.out);
+    written = await harness.writeRun(outcome, dir);
+  }
+
+  // Runs whether or not the run was written, so `--no-write` cannot be used to get a
+  // number without the gate. The report itself already carries these violations inside
+  // its limitations section; this is the copy a CI log shows and the reason for the
+  // exit code.
+  const policy = harness.checkReportPolicy(outcome.report);
+
+  if (args.json) {
+    process.stdout.write(
+      `${JSON.stringify({ report: outcome.report, written: written ?? null, policy }, null, 2)}\n`,
+    );
+  } else {
+    process.stdout.write(`${harness.renderConsoleSummary(outcome.report)}\n`);
+    if (written !== undefined) {
+      process.stdout.write(`\nreport   ${written.reportPath}\n`);
+      process.stdout.write(`result   ${written.resultPath}\n`);
+      process.stdout.write(`audit    ${written.auditPath}\n`);
+      process.stdout.write(
+        `trials   ${written.trajectoryCount} trajectory file(s), failures included\n`,
+      );
+    }
+    // Said on every run, not only in the report, because a number quoted from a
+    // terminal is the one most likely to end up somewhere without its caveats.
+    printCaveat(outcome.report.suite);
+  }
+
+  if (!policy.ok) {
+    process.stderr.write(
+      '\nadze-bench: this report violates docs/benchmarks/strategy.md and must not be\n' +
+        `published. ${policy.violations.length} violation(s):\n\n`,
+    );
+    for (const violation of policy.violations) {
+      process.stderr.write(`  ${violation.code}\n    ${violation.message}\n\n`);
+    }
+  }
+
+  const failed = outcome.report.totals.failed + outcome.report.totals.harnessErrors;
+  // A policy violation outranks a failing case: a report that may not be published is a
+  // worse outcome than one that reports a real failure honestly.
+  if (!policy.ok) {
+    process.exitCode = 3;
+  } else {
+    process.exitCode = failed > 0 ? 1 : 0;
+  }
+}
+
+function printCaveat(suite) {
+  // Polyglot states edit format rather than the applier, and index states local
+  // retrieval with non-comparable latency, because that is what each report's
+  // limitations section states and the terminal line must agree with the report.
+  if (suite === 'polyglot-bench') {
+    process.stdout.write(
+      '\nThis suite measures edit format against hand-written edits sampled from the\n' +
+        'Aider Polyglot shape (40 of 225). It is not a measurement of any model,\n' +
+        'and its number is not a per-model result.\n',
+    );
+  } else if (suite === 'index-bench') {
+    process.stdout.write(
+      '\nThis suite measures local retrieval on this machine against a checked-in\n' +
+        'fixture. Latency is not comparable across machines; precision is a wiring\n' +
+        'signal, not a ranking benchmark. It is not a measurement of any model.\n',
+    );
+  } else {
+    process.stdout.write(
+      '\nThis suite measures the applier against hand-written edits. It is not a\n' +
+        'measurement of any model, and its number is not a per-model result.\n',
+    );
+  }
+}
 
 let allCases;
 try {
@@ -136,7 +255,7 @@ if (args.command === 'list') {
     process.stdout.write(
       `${JSON.stringify(
         {
-          suite: args.suite,
+          suite: suiteName,
           total: allCases.length,
           listed: cases.length,
           cases: cases.map((c) => ({
@@ -153,7 +272,7 @@ if (args.command === 'list') {
       )}\n`,
     );
   } else {
-    process.stdout.write(`${args.suite}: ${cases.length} of ${allCases.length} case(s)\n\n`);
+    process.stdout.write(`${suiteName}: ${cases.length} of ${allCases.length} case(s)\n\n`);
     for (const c of cases) {
       const expectation = c.expect.kind === 'refusal' ? `refuse ${c.expect.reason}` : 'apply';
       process.stdout.write(`  ${c.id.padEnd(34)} ${expectation.padEnd(22)} ${c.description}\n`);
@@ -174,71 +293,10 @@ if (cases.length === 0) {
   process.exit(2);
 }
 
-const invocation = ['node', 'bench/harness/bin/adze-bench.mjs', ...process.argv.slice(2)].join(' ');
-const outcome = await harness.runSuite(cases, { suite: args.suite, invocation });
-
-let written;
-if (args.write) {
-  const dir =
-    args.out === undefined
-      ? join(repoRoot, 'bench', '.runs', `${harness.runStamp()}-${args.suite}`)
-      : resolve(args.out);
-  written = await harness.writeRun(outcome, dir);
-}
-
-// Runs whether or not the run was written, so `--no-write` cannot be used to get a
-// number without the gate. The report itself already carries these violations inside
-// its limitations section; this is the copy a CI log shows and the reason for the
-// exit code.
-const policy = harness.checkReportPolicy(outcome.report);
-
-if (args.json) {
-  process.stdout.write(
-    `${JSON.stringify({ report: outcome.report, written: written ?? null, policy }, null, 2)}\n`,
+{
+  const invocation = ['node', 'bench/harness/bin/adze-bench.mjs', ...process.argv.slice(2)].join(
+    ' ',
   );
-} else {
-  process.stdout.write(`${harness.renderConsoleSummary(outcome.report)}\n`);
-  if (written !== undefined) {
-    process.stdout.write(`\nreport   ${written.reportPath}\n`);
-    process.stdout.write(`result   ${written.resultPath}\n`);
-    process.stdout.write(`audit    ${written.auditPath}\n`);
-    process.stdout.write(
-      `trials   ${written.trajectoryCount} trajectory file(s), failures included\n`,
-    );
-  }
-  // Said on every run, not only in the report, because a number quoted from a
-  // terminal is the one most likely to end up somewhere without its caveats.
-  // Polyglot states edit format rather than the applier, because that is what its
-  // limitations section states and the terminal line must agree with the report.
-  if (outcome.report.suite === 'polyglot-bench') {
-    process.stdout.write(
-      '\nThis suite measures edit format against hand-written edits sampled from the\n' +
-        'Aider Polyglot shape (40 of 225). It is not a measurement of any model,\n' +
-        'and its number is not a per-model result.\n',
-    );
-  } else {
-    process.stdout.write(
-      '\nThis suite measures the applier against hand-written edits. It is not a\n' +
-        'measurement of any model, and its number is not a per-model result.\n',
-    );
-  }
-}
-
-if (!policy.ok) {
-  process.stderr.write(
-    '\nadze-bench: this report violates docs/benchmarks/strategy.md and must not be\n' +
-      `published. ${policy.violations.length} violation(s):\n\n`,
-  );
-  for (const violation of policy.violations) {
-    process.stderr.write(`  ${violation.code}\n    ${violation.message}\n\n`);
-  }
-}
-
-const failed = outcome.report.totals.failed + outcome.report.totals.harnessErrors;
-// A policy violation outranks a failing case: a report that may not be published is a
-// worse outcome than one that reports a real failure honestly.
-if (!policy.ok) {
-  process.exitCode = 3;
-} else {
-  process.exitCode = failed > 0 ? 1 : 0;
+  const outcome = await harness.runSuite(cases, { suite: suiteName, invocation });
+  await finishRun(outcome, suiteName);
 }
