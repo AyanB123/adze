@@ -73,7 +73,20 @@ const args = process.argv.slice(2);
 const asJson = args.includes('--json');
 const showAll = args.includes('--all');
 
-/** Split an SPDX expression into leaves, keeping the operator that joined them. */
+/** Split an SPDX expression into leaves, keeping the operator that joined them.
+ *
+ * NOTE: detection uses `\bAND\b` / `\bOR\b` while the split below uses
+ * `/\s+AND\s+/` / `/\s+OR\s+/`, and the mismatch is deliberate. Do not "tidy"
+ * them into agreement. SPDX ids contain the operator letters themselves:
+ * `AGPL-3.0-or-later` uppercases to `AGPL-3.0-OR-LATER`, where the hyphens give
+ * `\bOR\b` a boundary on both sides, so a `\b`-based split would tear one
+ * license into `AGPL-3.0-` and `-LATER`. Under the `OR` rule in `classify`
+ * (`allowed` wins if any leaf is allowed, `denied` only if every leaf is
+ * denied), the `-LATER` fragment classifies as `review`, and the whole
+ * expression degrades from `denied` to `review` — turning a build failure on
+ * the strongest copyleft in the denylist into a human-review queue entry.
+ * Splitting only on whitespace-surrounded operators keeps hyphenated ids whole.
+ */
 function parseExpression(raw) {
   const text = raw
     .trim()
