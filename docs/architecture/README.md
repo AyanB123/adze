@@ -5,12 +5,14 @@ This document describes how Adze is put together and why. It is the map; the
 
 > [!NOTE]
 > **This document describes the intended architecture, and some of it is not built
-> yet.** As of 2026-08-29 the protocol, engine, applier, provider gateway,
-> retrieval, CLI, and embedding SDK are committed and their suites pass. The
-> plugin host, MCP client and server, and every surface other than the CLI
-> are not.
+> yet.** The protocol, engine, applier, provider gateway, retrieval, CLI,
+> embedding SDK, plugin SDK, MCP client and server, and the VS Code extension are
+> committed and their suites pass (2,003 tests; the extension is landed but
+> unpublished). Not built: the WASM plugin host, `adze plugin dev`, and every
+> surface beyond the CLI and the extension.
 > Sections below flag the gap where it exists, and [the roadmap](../roadmap.md)
-> carries the authoritative per-package status. Two things worth knowing before
+> carries the authoritative per-package status — where this document and the
+> roadmap disagree, the roadmap wins. Two things worth knowing before
 > reading further: **OS-level sandbox containment holds on macOS and Linux where
 > the mechanism is usable, and not on Windows**, and **the performance targets in §9 have not been measured**.
 
@@ -121,7 +123,7 @@ graph TB
         APPLY["@adze/apply<br/>3-tier edit applier"]
         RETR["@adze/retrieval<br/>ripgrep · tree-sitter<br/>(vectors deferred)"]
         SAND["@adze/sandbox<br/>per-OS brokers<br/>(Windows excepted)"]
-        MCPC["@adze/mcp<br/>MCP client<br/>(in progress)"]
+        MCPC["@adze/mcp<br/>MCP client<br/>(landed)"]
     end
 
     CLI --> WIRE
@@ -192,8 +194,8 @@ graph LR
 | `@adze/apply` | Three-tier edit application with parse validation | Semver-strict from 0.2 | ✅ |
 | `@adze/retrieval` | ripgrep, tree-sitter symbols, hybrid RRF ranking; local vectors deferred | Internal | ✅ except vectors |
 | `@adze/sandbox` | Per-OS containment, `writableRoots`, command policy | Internal | ✅ Landed, Windows excepted |
-| `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec | 🚧 in progress |
-| `@adze/plugin-sdk` | Manifest schema, hook bus, WASM host, authoring types | Semver-strict from 0.2 | ❌ no code |
+| `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec | ✅ |
+| `@adze/plugin-sdk` | Manifest schema, hook bus, authoring types; WASM host excepted | Semver-strict from 0.2 | ✅ except WASM host |
 | `@adze/cli` | `adze` binary; plain text, TUI deferred | User-facing | ✅ |
 | `@adze/sdk` | Public embedding API | Semver-strict from 1.0 | ✅ |
 
@@ -413,12 +415,20 @@ is wired: `adze doctor` reports `os-level` where the mechanism is usable and
 
 ### 6.5 Plugin host
 
-**Not built.** `@adze/plugin-sdk` contains no code and `@adze/core` has no plugin
-host or hook bus yet. The six surfaces below are a specification, written before
-the implementation on purpose — the extension points are not validated until real
-plugins hit a wall, and the spec is what makes that wall findable. The hook
-arrows in the §5 turn diagram describe the intended flow, not code that runs
-today.
+**Partly built.** `@adze/plugin-sdk` carries the manifest schema, authoring
+types, and surfaces 1–5 below; `@adze/core` runs the hook bus (`packages/core/src/hooks.ts`,
+wired through the engine, turn, and dispatch paths) with deny-capable lifecycle
+events plus declarative subagents. Eight first-party plugins exercise them — see
+`plugins/FINDINGS.md` for what building them taught us. **Not built:** the WASM
+host. `wasm32-wasip2` is a seam, not a runtime: the default
+`unavailableWasmRuntime` **fails the load** rather than skipping the module,
+because a policy hook that quietly never runs looks like a working policy and is
+not. What actually executes procedural plugin code today is a local ES module
+runtime. `adze plugin dev` with local override is likewise **not built** — there
+is no `plugin` subcommand. The hook arrows in the §5 turn diagram describe the
+intended flow with one exception now running: the hook bus itself fires on every
+turn, and only the WASM-isolation box around it is still intent rather than
+implementation.
 
 Six surfaces, shipping in this order:
 
@@ -439,10 +449,10 @@ without a fork. [ADR-0008](adr/0008-plugin-architecture.md),
 ### 6.6 Surfaces
 
 **CLI** — engine in-process for startup latency. Plain-text output only; the TUI
-is deferred so Adze stays scriptable and CI-usable. This is the one surface that
-exists today.
+is deferred so Adze stays scriptable and CI-usable. One of the two surfaces that
+exist today.
 
-**VS Code / Cursor extension** — in progress. Ships first and reaches users where
+**VS Code / Cursor extension** — landed, unpublished. Ships first and reaches users where
 they already are, including Cursor's own users, with no build pipeline and no
 legal exposure. Publishing an extension *to* the Marketplace is explicitly
 permitted; consuming the Marketplace from a fork is not.
@@ -462,11 +472,12 @@ upstream now maintains and ships weekly.
 
 Ranked by how much you can change without forking.
 
-**This table describes the design target, not today's capability.** Of the rows
-below, only "use a different model" (provider config) and "build a new surface"
-(`@adze/sdk`, with `examples/minimal-surface` as a working one) are available now.
-Everything routed through a plugin or an MCP server needs the plugin host and
-`@adze/mcp`, neither of which is built.
+**Most rows below work today.** "Use a different model" (provider config),
+"build a new surface" (`@adze/sdk`, with `examples/minimal-surface` as a working
+one), and every row routed through a plugin or an MCP server work now that
+surfaces 1–5 and `@adze/mcp` have landed. Two qualifications: procedural plugin
+code executes as local ES modules rather than WASM-isolated, and plugin UI needs
+a surface that implements it.
 
 | I want to... | Do this | Fork needed? |
 | --- | --- | --- |
@@ -524,8 +535,8 @@ to user configuration rather than to model output.
 Two of the three enforcement boxes above are not implemented everywhere. The **permission
 gate** is real and every tool call passes through it. The **OS sandbox** is wired
 into the CLI on macOS and Linux where the mechanism is usable, and does not
-exist on Windows, and **WASM isolation** does not exist because there is no
-plugin host to isolate. So the keepable claim on a host without containment is
+exist on Windows, and **WASM isolation** does not exist because the WASM host is
+not built — procedural plugin code runs as local ES modules, unisolated. So the keepable claim on a host without containment is
 narrower still: an
 injection cannot get a command *approved*, but an approved command is not confined
 once it runs. The diagram shows the intended defence in depth; presently only its
