@@ -111,7 +111,7 @@ jobs:
     outputs:
       active: ${{ steps.check.outputs.active }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: check for a fork target
         id: check
@@ -159,7 +159,7 @@ jobs:
       current: ${{ steps.resolve.outputs.current }}
       behind: ${{ steps.resolve.outputs.behind }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       # Refs only — no clone. Release tags are plain X.Y.Z; anything else upstream
       # tags (insiders builds, distro tags) must not be treated as a release.
@@ -234,7 +234,7 @@ jobs:
       clean: ${{ steps.check.outputs.clean }}
       broken: ${{ steps.check.outputs.broken }}
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: fetch upstream at the target tag
         env:
@@ -310,7 +310,7 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Full history: the tag-bump commit is pushed from here.
           fetch-depth: 0
@@ -324,7 +324,7 @@ jobs:
       # key and the second fails. Splitting them makes the write conditional on the
       # merge having produced something worth caching.
       - name: restore rerere cache
-        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: rr-cache
           key: rerere-${{ github.run_id }}
@@ -492,7 +492,7 @@ jobs:
       # fills the cache with copies of the same thing under different keys.
       - name: persist rerere cache
         if: always()
-        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: rr-cache
           key: rerere-${{ github.run_id }}
