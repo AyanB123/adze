@@ -1,0 +1,13 @@
+diff --git a/parse.mjs b/parse.mjs
+index 2072af7..f34ce3a 100644
+--- a/parse.mjs
++++ b/parse.mjs
+@@ -1,7 +1,7 @@
+ export function parseDuration(input) {
+   const m = /^(\d+)(ms|s|m|h)$/.exec(String(input).trim());
+   if (!m) {
+-    throw new Error(`unparseable duration: ${input}`);
++    return null;
+   }
+   const n = Number(m[1]);
+   const unit = m[2];

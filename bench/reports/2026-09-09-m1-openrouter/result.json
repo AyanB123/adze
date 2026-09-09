@@ -8,7 +8,7 @@
       "id": "run-01-scratch-fix",
       "task": "M1-style: fix the failing test in a scratch git repo (duration parser threw on unparseable input instead of returning null)",
       "prompt": "fix the failing test",
-      "workspace": "scratch git repo outside the monorepo (fixture copied to trajectories/scratch-fixture/)",
+      "workspace": "scratch git repo outside the monorepo (fixture copied to trajectories/fixture/)",
       "sandbox": "workspace-write",
       "approval": "never",
       "maxSteps": 25,
