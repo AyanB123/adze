@@ -175,3 +175,16 @@ New ADRs cite sources by name and add them here with the decision.
   (the `forbid`/`allow` failures against shell-wrapped argv) and the gate
   documentation naming prefix rules as the remedy. It amends ADR-0007's
   mechanism, not its decision.
+
+## ADR-0014 — Windows containment via a Rust sidecar
+
+- Named: Microsoft Learn for the three blocking APIs ("CreateRestrictedToken",
+  "Job Objects", "AppContainer isolation" including
+  `PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES` in `STARTUPINFOEX`), and the
+  Node.js `child_process.spawn` options documentation for what the current
+  runtime cannot express.
+- Project-observable: the `WindowsContainmentHelper` seam in
+  `packages/sandbox/src/windows.ts` and the `gate-only` enforcement the
+  broker reports without one.
+- Unattributed: the survey claim inherited from ADR-0007 that no open-source
+  agent has a working Windows sandbox.

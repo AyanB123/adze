@@ -24,6 +24,7 @@ nobody — including the author — will remember whether an option was consider
 | [0011](0011-benchmark-harness.md) | Adopt Harbor; isolate evaluation in two containers | Accepted |
 | [0012](0012-licensing-and-governance.md) | Apache-2.0, DCO, no open-core split | Accepted |
 | [0013](0013-command-rules-match-requested-command.md) | Command rules match the requested command, not the executed argv | Accepted |
+| [0014](0014-windows-containment-sidecar.md) | Windows containment via a Rust sidecar behind the existing seam | Proposed |
 
 ## Sources
 
