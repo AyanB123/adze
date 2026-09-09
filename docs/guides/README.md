@@ -12,6 +12,7 @@ User documentation for Adze. For the reasoning behind the design, read
 | [gateway-openai-compatible.md](gateway-openai-compatible.md) | You want to point Adze at an OpenAI-compatible gateway — OpenRouter, llama.cpp, Ollama, vLLM, or an in-house one. Includes how to check that a gateway actually serves your model in the OpenAI wire format before configuring it. |
 | [plugins.md](plugins.md) | You want to encode a team policy without forking. The eight first-party plugins, the deny-capable hook, and how to write your own. |
 | [embedding.md](embedding.md) | You want to build your own surface — a CLI, an extension, a daemon, a bot — on `@adze/sdk`. |
+| [publishing-extension.md](publishing-extension.md) | You want to publish the VS Code extension. Packaging readiness, the credential checklist, and the runbook for both galleries. |
 
 Every command shown in these guides was run against the built binary before being
 written down, and quoted output is that run's real output. Where a capability does not
