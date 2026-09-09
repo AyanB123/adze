@@ -49,10 +49,11 @@ discovered later.
   macOS with `sandbox-exec` and Linux with usable bubblewrap get `os-level`
   containment; everything else is `gate-only`. See the warning above and
   [ADR-0007](../architecture/adr/0007-sandbox-and-permissions.md).
-- **No live end-to-end `adze run` against a real model has been witnessed.** The code
-  path is exercised and its failure handling is tested — this guide includes a real
-  provider-unreachable transcript — but nobody has yet published a successful turn
-  against a real key. Expect to be early. That is M1's unmet exit criterion.
+- **A live end-to-end `adze run` against a real model has been demonstrated.** On
+  2026-08-30, `adze run "fix the failing test"` completed a task in a scratch git
+  repository against `kimi-k3` through an OpenAI-compatible endpoint. This is one
+  task on one model on one platform, not a pass-rate measurement; see [the
+  roadmap](../roadmap.md).
 - **Vector search is deliberately deferred.** Retrieval is `ripgrep` plus
   `tree-sitter` symbols fused with reciprocal rank fusion. `@adze/retrieval` exposes
   a `VectorIndex` seam with no implementation and pulls in no embedding dependency,
