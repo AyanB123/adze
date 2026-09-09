@@ -15,7 +15,14 @@ Design reasoning: [ADR-0008](../architecture/adr/0008-plugin-architecture.md).
 
 Most plugins contain no executable code at all — a tool integration, a slash
 command, or a subagent is pure declaration. Only hooks and dynamic context
-providers need code, and that code compiles to WebAssembly so it runs sandboxed.
+providers need code. That code targets `wasm32-wasip2` so it runs sandboxed —
+and this build ships the WASM host interface with **no WASM runtime**, so a
+`.wasm` module refuses to load rather than loading without its policy (the
+loader reports `module-unloadable`). What executes procedural plugin code today
+is a local ES module runtime: `runtime: "js"` runs in the Adze process with no
+sandbox and loads only when the host opts in with `allowUnsandboxedJs`;
+`runtime: "native"` likewise needs `allowNative`. The four declarative-first-party
+plugins need no flags at all, because there is no code to run.
 
 ```
 my-plugin/
@@ -29,9 +36,24 @@ my-plugin/
     └── policy.wasm       # compiled from Rust/Go/Zig/TinyGo → wasm32-wasip2
 ```
 
-Install: `adze plugin add <npm-package | git-url | ./local-path>`
-Develop: `adze plugin dev ./my-plugin` — overrides any published version, so you
-can iterate without publishing.
+Install: `adze plugin add <npm-package | git-url | ./local-path>` — **not built.**
+Develop: `adze plugin dev ./my-plugin` — **not built.** There is no `plugin`
+subcommand; both are milestone M3 deliverables ([roadmap](../../docs/roadmap.md)).
+What works today is loading plugins **programmatically** through
+`@adze/plugin-sdk`:
+
+```ts
+import { jsModuleRuntime, loadPlugins } from '@adze/plugin-sdk';
+
+const set = await loadPlugins(['./my-plugin'], {
+  engineVersion: '0.0.1',
+  jsRuntime: jsModuleRuntime({ allowedRoots: ['.'] }),
+  allowUnsandboxedJs: true, // required for runtime: "js"; a JS module is not sandboxed
+});
+```
+
+See [the plugin guide](../guides/plugins.md) for the full worked loading script,
+verified against all eight first-party plugins.
 
 ---
 
@@ -49,20 +71,28 @@ can iterate without publishing.
 
   // Adze engine versions this plugin supports. Checked at load time; a
   // mismatch is a clear error rather than a mysterious runtime failure.
-  "engines": { "adze": ">=0.4.0 <2.0.0" },
+  // The engine is pre-1.0 (currently 0.0.1); copy this range verbatim.
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
 
   // Everything below is optional. Declare only the surfaces you use.
+  // Shapes: tools are MCP server configs (surface 1); contextProviders are
+  // glob or wasm entries (surface 2); commands and agents are file references
+  // to markdown with front matter (surfaces 3 and 5); hooks carry an explicit
+  // runtime (surface 4); ui is accepted by the manifest and refused by the
+  // engine, which hands it to a surface (surface 6).
   "contributes": {
-    "tools":            [ /* MCP servers — surface 1 */ ],
-    "contextProviders": [ /* surface 2 */ ],
-    "commands":         [ /* surface 3 */ ],
-    "hooks":            [ /* surface 4 */ ],
-    "agents":           [ /* surface 5 */ ],
-    "ui":               [ /* surface 6, surface-specific */ ]
+    "tools":            [ /* { name, transport, command|url, ... } — surface 1 */ ],
+    "contextProviders": [ /* { type: "glob", ... } | { type: "wasm", ... } — surface 2 */ ],
+    "commands":         [ { "path": "commands/review.md" } ],
+    "hooks":            [ { "event": "edit.pre", "module": "hooks/policy.wasm", "runtime": "wasm", "timeoutMs": 500 } ],
+    "agents":           [ { "path": "agents/security.md" } ],
+    "ui":               [ { "surface": "cli", "id": "panel", "kind": "panel" } ]
   },
 
   // Requested capabilities. Shown to the user at install time. A plugin that
   // asks for more than it needs is a plugin users should decline.
+  // Omit permissions and the plugin gets none: filesystem "none", no network,
+  // no env. A hook that inspects the edit payload needs no filesystem access.
   "permissions": {
     "filesystem": "read",              // none | read | workspace-write
     "network": ["api.acme.com"],       // explicit hosts, or omit for none
@@ -70,6 +100,15 @@ can iterate without publishing.
   }
 }
 ```
+
+`id` must be `<namespace>.<name>` with **exactly one dot**, lowercase letters,
+digits and hyphens only. `acme.team.guard` is refused: the namespace is a trust
+boundary (explicit namespace claims defend against squatting), so the part of
+the id a claim applies to has to be mechanically extractable.
+
+`timeoutMs` on a hook (or a `wasm` context provider) defaults to 500 and is
+capped at 10,000. A hook is synchronous with respect to the agent's progress,
+so an unbounded hook is a latency bug the plugin author will not notice.
 
 ---
 
@@ -99,14 +138,24 @@ transport is not implemented.
 ## Surface 2 — Context providers
 
 Inject content into the agent's context. Static providers are declarative; dynamic
-ones export one WASM function.
+ones export one function from a guest module.
 
 ```jsonc
 "contextProviders": [
-  { "name": "adr", "type": "glob", "patterns": ["docs/adr/**/*.md"], "trigger": "@adr" },
-  { "name": "jira", "type": "wasm", "module": "providers/jira.wasm", "trigger": "@jira" }
+  { "name": "adr", "type": "glob", "patterns": ["docs/adr/**/*.md"], "trigger": "@adr", "maxBytes": 32768 },
+  { "name": "jira", "type": "wasm", "module": "providers/jira.wasm", "trigger": "@jira", "timeoutMs": 500, "maxBytes": 32768 }
 ]
 ```
+
+A `glob` provider needs `name`, `patterns`, `trigger` (`@name`, lowercase), and
+an optional `maxBytes` ceiling. A `wasm` provider needs `module`, `trigger`, and
+optional `timeoutMs` / `maxBytes`. The `wasm` discriminant names the surface, not
+the isolation: the module's runtime is inferred from its extension exactly as
+hooks are (`.wasm` → wasm, `.js`/`.mjs` → js), and the same host opt-ins apply —
+a `.mjs` provider needs `allowUnsandboxedJs`, and a `.wasm` provider needs a
+`wasm32-wasip2` runtime this build does not ship, so it refuses to load. There is
+no `runtime` field to override the inference; a `type: "wasm"` entry pointing at
+a `.mjs` file runs as unsandboxed JavaScript, gated by `allowUnsandboxedJs`.
 
 ```rust
 // wasm32-wasip2
@@ -116,9 +165,20 @@ fn provide_context(query: &str) -> Vec<Chunk> {
 }
 ```
 
+Context-provider triggers are the only contribution kind currently checked for
+collisions across plugins: two plugins claiming `@docs` load, the first one wins,
+and the loser is reported. Slash-command and subagent names are not checked —
+two plugins can each contribute `review` and which one `/review` invokes depends
+on load order.
+
 ## Surface 3 — Slash commands
 
-A markdown file: YAML front matter plus a prompt template.
+A slash command is a manifest file reference plus a markdown file: YAML front
+matter plus a prompt template.
+
+```jsonc
+"commands": [{ "path": "commands/review.md" }]
+```
 
 ```markdown
 ---
@@ -137,7 +197,11 @@ Report findings by severity. Do not modify files.
 ```
 
 `!` executes a command and inlines its output (gate-checked like any tool call).
-`@name` invokes a context provider.
+A `!` block with no host-supplied command runner refuses the whole command with
+`frontmatter-invalid` rather than running without it. `@name` invokes a context
+provider. `model:` must be inline (`model: { prefer: reasoning }`); the nested
+block form is a parse error, because the front-matter parser accepts no nested
+block mapping under a mapping key.
 
 ## Surface 4 — Hooks
 
@@ -147,9 +211,28 @@ forking.
 
 ```jsonc
 "hooks": [
-  { "event": "edit.pre", "module": "hooks/policy.wasm", "timeoutMs": 500 }
+  { "event": "edit.pre", "module": "hooks/policy.wasm", "runtime": "wasm", "timeoutMs": 500 }
 ]
 ```
+
+`runtime` is `"wasm"`, `"js"`, or `"native"`. It may be omitted when the module
+extension says how to run it: `.wasm` infers `wasm`, `.js`/`.mjs` infers `js`.
+Anything else refuses to load with `module-unloadable` rather than guessing —
+defaulting an unknown extension to `native` would silently run unsandboxed code,
+and `native` is never inferred. `export` optionally names the guest function
+(defaults to the event name). Every hook entry above is explicit about its
+runtime so a reader of the manifest can see the isolation without knowing the
+inference rules.
+
+What the runtime costs: `wasm` needs a `wasm32-wasip2` runtime this build does
+not ship, so the default host refuses the plugin with `module-unloadable`
+instead of loading it without its policy. `js` is an ES module imported into the
+Adze process with the engine's full privileges — the same exposure as `native`
+— so the host must pass `allowUnsandboxedJs` (or `allowNative` for `native`),
+supply `jsRuntime: jsModuleRuntime({ allowedRoots })` so the module cannot leave
+its roots, and the plugin refuses without that opt-in (`native-not-permitted`).
+A hook module that will not load fails the whole plugin: a policy that appears
+installed and enforces nothing is worse than one that refuses to install.
 
 | Event | May return | Use |
 | --- | --- | --- |
@@ -173,9 +256,39 @@ fn guard(ctx: EditContext) -> HookResult {
 }
 ```
 
+What runs today is the same contract as an ES module, because the WASM runtime
+above is not built. The guest exports `invoke(functionName, input)` and returns
+`{ kind: "allow" | "deny" | "modify" | "inject" | "replace" }`:
+
+```js
+// hooks/policy.mjs — runtime: "js", unsandboxed, needs allowUnsandboxedJs
+export function invoke(functionName, input) {
+  if (functionName === 'edit.pre') {
+    const introduced = [
+      ...(input.wholeFile && typeof input.content === 'string' ? [input.content] : []),
+      ...(Array.isArray(input.edits) ? input.edits.map((e) => e.replace) : []),
+    ];
+    if (input.path.includes('/migrations/') && input.approvedByHuman !== true) {
+      return { kind: 'deny', reason: 'Migrations require human review (policy: acme-eng-014)' };
+    }
+    void introduced;
+    return { kind: 'allow' };
+  }
+  return { kind: 'allow' };
+}
+```
+
 Hooks are in the hot path, so `timeoutMs` is enforced. A hook that times out is
 treated as `allow` and logged loudly — failing closed on a slow hook would make
-the agent unusable, and failing silently would hide a broken policy.
+the agent unusable, and failing silently would hide a broken policy. A host that
+would rather stop the agent passes `onFailure: 'deny'` to the `HookHost`; the
+SDK refuses to make that choice on its behalf. Hook events cannot be scoped to a
+tool, so every hook runs on every call of its event — open with
+`if (input.name !== 'bash') return { kind: 'allow' };` and expect the cost to
+grow linearly with installed policy plugins. `tool.pre` fires for every tool
+call and additionally derives `edit.pre` for edit-shaped tools, so a plugin
+registering both is invoked twice per edit; the events compose rather than
+alternate.
 
 ### The `edit.pre` payload
 
@@ -212,6 +325,12 @@ tool-agnostic fields do not carry.
 
 ## Surface 5 — Subagents
 
+A subagent is a manifest file reference plus a markdown definition:
+
+```jsonc
+"agents": [{ "path": "agents/security.md" }]
+```
+
 ```markdown
 ---
 name: security-reviewer
@@ -226,7 +345,13 @@ You cannot modify files. Prefer a false positive over a missed injection.
 ```
 
 Invoked by the `task` tool or a slash command. Subagents inherit the parent's
-sandbox — narrower tools, never broader permissions.
+sandbox — narrower tools, never broader permissions. `tools` is required: a
+subagent omitting it is refused, because an empty list would otherwise inherit
+the parent's whole tool set. A subagent omitting `permissions` inherits the
+parent's, which can only narrow and never widen — state `permissions` explicitly
+so the asymmetry is visible. As with commands, `model:` must be inline, and only
+`filesystem` is narrowable in front matter: `network` or `env` lists cannot nest
+under a mapping key and are refused rather than dropped.
 
 ## Surface 6 — UI
 
@@ -234,6 +359,15 @@ Surface-specific and deliberately last. **UI cannot be contributed to the
 engine** — only to a surface — because a plugin that injects UI into the engine
 would immediately split the CLI, extension, and IDE into three different products.
 See [ADR-0001](../architecture/adr/0001-engine-first-architecture.md).
+
+```jsonc
+"ui": [{ "surface": "cli", "id": "panel", "kind": "panel", "title": "Review", "entry": "ui/panel.mjs" }]
+```
+
+The manifest accepts UI so a plugin with both a hook and a panel loads
+engine-side; the engine host drops every UI entry, records each as a
+`ui-refused-by-engine` notice for the surface, and throws if a surface offers
+one to the engine. `surface` is `cli`, `vscode`, or `ide`.
 
 ---
 
