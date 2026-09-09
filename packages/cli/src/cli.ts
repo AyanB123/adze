@@ -29,6 +29,7 @@ import {
   runPluginValidate,
 } from './commands/plugin.js';
 import { type RunOptions, runRun } from './commands/run.js';
+import { runSessionsList, type SessionsListOptions } from './commands/sessions.js';
 import { runValidate, type ValidateOptions } from './commands/validate.js';
 import { EXIT, type ExitCode, type Io, processIo } from './output.js';
 import { CLI_VERSION } from './version.js';
@@ -168,7 +169,8 @@ export function buildProgram(io: Io, state: RunState): Command {
       .command('run')
       .description('run one task to completion, non-interactive')
       .argument('<prompt>', 'what the agent should do')
-      .option('--json', 'one JSON event per line on stdout, then a summary document'),
+      .option('--json', 'one JSON event per line on stdout, then a summary document')
+      .option('--no-trajectory', 'do not write a trajectory file to .adze/sessions/'),
   )
     .addHelpText(
       'after',
@@ -194,16 +196,44 @@ export function buildProgram(io: Io, state: RunState): Command {
     });
 
   withAgentFlags(
-    program.command('chat').description('interactive session with the agent, in plain text'),
+    program
+      .command('chat')
+      .description('interactive session with the agent, in plain text')
+      .option(
+        '--resume <id>',
+        'continue a persisted session (.adze/sessions/<id>.jsonl); use "last" for the most recent',
+      )
+      .option('--last', 'continue the most recently updated persisted session'),
   )
     .addHelpText(
       'after',
-      '\nSlash commands: /usage, /model, /clear, /help, /exit.\n' +
+      '\nSlash commands: /usage, /model, /clear, /compact, /fork, /init, /review-diff, /plugins, /doctor, /help, /exit.\n' +
         '\nOne session across every prompt, so the conversation accumulates and the cached\n' +
-        'prefix stays reusable. Plain text by design; there is no TUI yet (ADR-0001 §6.6).\n',
+        'prefix stays reusable. History is persisted to .adze/sessions/<id>.jsonl after\n' +
+        'every turn; --resume continues one, and /clear starts a new persisted session.\n' +
+        'Plain text by design; there is no TUI yet (ADR-0001 §6.6).\n',
     )
     .action(async (options: ChatOptions) => {
       state.exitCode = await runChat(options, io);
+    });
+
+  const sessions = program
+    .command('sessions')
+    .description('persisted chat sessions in .adze/sessions/ (local-only, gitignored)')
+    .addHelpText(
+      'after',
+      '\nLocal-only: history lives in .adze/sessions/<id>.jsonl. Deleting the file\n' +
+        'forgets the session. Run trajectories land beside them as\n' +
+        '<id>.trajectory.jsonl.\n',
+    );
+
+  sessions
+    .command('list')
+    .description('list persisted sessions, newest first')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .action(async (options: SessionsListOptions) => {
+      state.exitCode = await runSessionsList(options, io);
     });
 
   program

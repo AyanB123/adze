@@ -20,8 +20,14 @@
  * a bug in every metric computed from these runs.
  */
 
-import type { Warning } from '@adze/protocol';
-import { denyingChannel, promptingChannel, stdinReader } from '../agent/approval.js';
+import type { TurnOutcome } from '@adze/core';
+import type { AdzeEvent, Warning } from '@adze/protocol';
+import {
+  type ApprovalChannel,
+  denyingChannel,
+  promptingChannel,
+  stdinReader,
+} from '../agent/approval.js';
 import { renderFailure } from '../agent/failure.js';
 import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
@@ -34,8 +40,11 @@ import {
 import { type AgentSetup, buildAgent } from '../agent/setup.js';
 import { type RunSummary, renderSummary, summaryJson } from '../agent/summary.js';
 import { EXIT, type ExitCode, type Io, type Style, styleFor, writeJsonLine } from '../output.js';
+import { writeTrajectoryFile } from '../sessions/store.js';
 
 export interface RunOptions extends AgentFlags {
+  /** Set by `--no-trajectory`. When false, no trajectory file is written. */
+  readonly trajectory?: boolean;
   /** Test seam: a scripted approval channel and a mock model, so no key is needed. */
   readonly __testHooks?: TestHooks;
 }
@@ -120,6 +129,8 @@ export async function runRun(
         });
 
   const startedAt = (hooks?.now ?? Date.now)();
+  const wantTrajectory = options.trajectory !== false;
+  const tracker = new TrajectoryTracker();
 
   try {
     const agent = buildAgent({
@@ -132,73 +143,35 @@ export async function runRun(
       approvals: invocation.approvals,
       commandRules: invocation.commandRules,
       instructions: invocation.instructions,
-      sink: renderer.sink,
+      sink: tracker.sink(renderer),
       approvalChannel: approvals,
       containment,
       ...(hooks?.languageModel === undefined ? {} : { languageModel: hooks.languageModel }),
       ...(hooks?.resolve === undefined ? {} : { resolve: hooks.resolve }),
     });
 
-    const init = agent.engine.initialize({
-      protocolVersions: ['0.1'],
-      client: { name: 'adze-cli', version: '0.0.1', platform: process.platform },
-    });
-
-    const dev = await readPluginDev(agent.workspaceRoot);
-    if (!invocation.json) {
-      renderPreamble(agent, invocation, init.warnings, io, style, dev);
-    }
-
-    const { sessionId } = await agent.engine.sessionCreate({
-      workspaceRoot: agent.workspaceRoot,
-      model: agent.model,
-      sandbox: agent.sandbox,
-      approvals: agent.approvals,
-      ...(invocation.instructions === undefined ? {} : { instructions: invocation.instructions }),
-    });
-
-    // Ctrl-C cancels the turn rather than killing the process, so the engine can append the
-    // synthetic tool results that keep the history linear and the trajectory replayable.
-    const cancellation = installCancelHandler();
-
-    const { turnId } = await agent.engine.turnSubmit({
-      sessionId,
+    return await driveRun({
+      agent,
       prompt,
-      attachments: [],
-      budget: invocation.budget,
+      invocation,
+      io,
+      style,
+      renderer,
+      approvals,
+      tracker,
+      startedAt,
+      now: hooks?.now ?? Date.now,
+      wantTrajectory,
     });
-
-    cancellation.arm(() => {
-      io.err(`\n${style.warn('cancelling…')} ${style.dim('press Ctrl-C again to exit now')}\n`);
-      agent.engine.turnCancel({ sessionId, turnId });
-    });
-
-    const outcome = await agent.engine.awaitTurn(turnId);
-    cancellation.dispose();
-
-    const summary: RunSummary = {
-      model: agent.model,
-      stopReason: outcome.stopReason,
-      steps: outcome.steps,
-      usage: outcome.usage,
-      prices: agent.gateway.priceFor(agent.model),
-      durationMs: (hooks?.now ?? Date.now)() - startedAt,
-      approvals: approvals.count(),
-      droppedEvents: renderer.droppedEvents,
-    };
-
-    // One line, not indented: this goes onto the same stdout stream the renderer has been
-    // writing one event per line to, and a consumer parses it line by line.
-    if (invocation.json) {
-      writeJsonLine(io, {
-        ...summaryJson(summary),
-        ...(dev === undefined ? {} : { plugins: { dev } }),
-      });
-    } else renderSummary(summary, io, style);
-
-    await agent.engine.sessionClose({ sessionId });
-    return outcome.stopReason === 'end-turn' ? EXIT.Ok : EXIT.Failure;
   } catch (error) {
+    await persistFailedTrajectory(
+      invocation.workspaceRoot,
+      tracker,
+      wantTrajectory,
+      invocation.json,
+      io,
+      style,
+    );
     // Every failure renders through one path. A `ProviderConfigurationError` raised inside
     // the turn — the credential check on the first request — is the same problem to the user
     // as one raised at setup, and `renderFailure` already distinguishes a configuration
@@ -206,6 +179,222 @@ export async function runRun(
     return renderFailure(error, io, style).code;
   } finally {
     approvals.close();
+  }
+}
+
+/** Captures the engine event stream for the trajectory file, then renders it. */
+class TrajectoryTracker {
+  private readonly events: AdzeEvent[] = [];
+  private sessionId: string | undefined;
+
+  sink(renderer: EventRenderer): (event: AdzeEvent) => void {
+    return (event: AdzeEvent): void => {
+      this.events.push(event);
+      renderer.sink(event);
+    };
+  }
+
+  markSession(sessionId: string): void {
+    this.sessionId = sessionId;
+  }
+
+  get id(): string | undefined {
+    return this.sessionId;
+  }
+
+  get captured(): readonly AdzeEvent[] {
+    return this.events;
+  }
+}
+
+interface DriveRunArgs {
+  readonly agent: AgentSetup;
+  readonly prompt: string;
+  readonly invocation: ReturnType<typeof parseAgentFlags>;
+  readonly io: Io;
+  readonly style: Style;
+  readonly renderer: EventRenderer;
+  readonly approvals: ApprovalChannel;
+  readonly tracker: TrajectoryTracker;
+  readonly startedAt: number;
+  readonly now: () => number;
+  readonly wantTrajectory: boolean;
+}
+
+/**
+ * Session, turn, summary, trajectory — the work after setup.
+ *
+ * Split from {@link runRun} so neither function carries both the wiring and the
+ * loop. Setup failures (bad flags, no credential) and turn failures (provider
+ * down, budget hit) read better apart, and the split holds `runRun` under the
+ * complexity ceiling without suppressing the rule.
+ */
+async function driveRun(args: DriveRunArgs): Promise<ExitCode> {
+  const { agent, prompt, invocation, io, style, renderer, approvals, tracker } = args;
+  const init = agent.engine.initialize({
+    protocolVersions: ['0.1'],
+    client: { name: 'adze-cli', version: '0.0.1', platform: process.platform },
+  });
+
+  const dev = await readPluginDev(agent.workspaceRoot);
+  if (!invocation.json) {
+    renderPreamble(agent, invocation, init.warnings, io, style, dev);
+  }
+
+  const { sessionId } = await agent.engine.sessionCreate({
+    workspaceRoot: agent.workspaceRoot,
+    model: agent.model,
+    sandbox: agent.sandbox,
+    approvals: agent.approvals,
+    ...(invocation.instructions === undefined ? {} : { instructions: invocation.instructions }),
+  });
+  tracker.markSession(sessionId);
+
+  const outcome = await submitAndAwait(agent, sessionId, prompt, invocation, io, style);
+
+  const summary: RunSummary = {
+    model: agent.model,
+    stopReason: outcome.stopReason,
+    steps: outcome.steps,
+    usage: outcome.usage,
+    prices: agent.gateway.priceFor(agent.model),
+    durationMs: args.now() - args.startedAt,
+    approvals: approvals.count(),
+    droppedEvents: renderer.droppedEvents,
+  };
+
+  const trajectoryPath = await persistTrajectory(
+    invocation.workspaceRoot,
+    sessionId,
+    tracker.captured,
+    args.wantTrajectory,
+    io,
+    style,
+  );
+  renderCompletion(
+    summary,
+    trajectoryPath,
+    renderer.droppedEvents,
+    dev,
+    invocation.json,
+    io,
+    style,
+  );
+
+  await agent.engine.sessionClose({ sessionId });
+  return outcome.stopReason === 'end-turn' ? EXIT.Ok : EXIT.Failure;
+}
+
+/**
+ * Submit one turn with Ctrl-C mapped to cancel.
+ *
+ * The first press asks the engine to stop, which lets it complete the history
+ * rather than leaving an assistant message with unanswered tool calls. The
+ * second press is the escape hatch for a run that will not stop.
+ */
+async function submitAndAwait(
+  agent: AgentSetup,
+  sessionId: string,
+  prompt: string,
+  invocation: ReturnType<typeof parseAgentFlags>,
+  io: Io,
+  style: Style,
+): Promise<TurnOutcome> {
+  const cancellation = installCancelHandler();
+  const { turnId } = await agent.engine.turnSubmit({
+    sessionId,
+    prompt,
+    attachments: [],
+    budget: invocation.budget,
+  });
+  cancellation.arm(() => {
+    io.err(`\n${style.warn('cancelling…')} ${style.dim('press Ctrl-C again to exit now')}\n`);
+    agent.engine.turnCancel({ sessionId, turnId });
+  });
+  try {
+    return await agent.engine.awaitTurn(turnId);
+  } finally {
+    cancellation.dispose();
+  }
+}
+
+/**
+ * The summary document on the right stream.
+ *
+ * JSON goes onto stdout as one line — the stream the renderer has been writing
+ * one event per line to, so a consumer parses it line by line. Plain text goes
+ * to stderr with the trajectory path and the gap note beside it.
+ */
+function renderCompletion(
+  summary: RunSummary,
+  trajectoryPath: string | undefined,
+  droppedEvents: number,
+  dev: { readonly id: string; readonly root: string } | undefined,
+  json: boolean,
+  io: Io,
+  style: Style,
+): void {
+  if (json) {
+    writeJsonLine(io, {
+      ...summaryJson(summary),
+      ...(trajectoryPath === undefined ? {} : { trajectory: trajectoryPath }),
+      ...(dev === undefined ? {} : { plugins: { dev } }),
+    });
+    return;
+  }
+  renderSummary(summary, io, style);
+  if (trajectoryPath !== undefined) {
+    io.err(`${'  trajectory'.padEnd(24)} ${trajectoryPath}\n`);
+  }
+  if (droppedEvents > 0) {
+    io.err(
+      `${style.dim('The trajectory file holds what the engine emitted; the gap above means the live stream showed fewer lines.')}\n`,
+    );
+  }
+}
+
+/** A failed turn still leaves a trajectory worth keeping. Best-effort, never masking the error. */
+async function persistFailedTrajectory(
+  workspaceRoot: string,
+  tracker: TrajectoryTracker,
+  want: boolean,
+  json: boolean,
+  io: Io,
+  style: Style,
+): Promise<void> {
+  const sessionId = tracker.id;
+  if (!want || sessionId === undefined || tracker.captured.length === 0) return;
+  try {
+    const path = await writeTrajectoryFile(workspaceRoot, sessionId, tracker.captured);
+    if (!json) io.err(`${style.dim(`trajectory ${path}`)}\n`);
+  } catch {
+    // Storage failing must not replace the error the user needs to see.
+  }
+}
+
+/**
+ * Write the trajectory file, or warn and continue when storage fails.
+ *
+ * Returns the path written, or undefined when disabled or unwritable. A run whose
+ * output cannot be persisted is still a run — failing it for a storage problem
+ * would confuse "the agent did not finish" with "the disk is full".
+ */
+async function persistTrajectory(
+  workspaceRoot: string,
+  sessionId: string,
+  events: readonly AdzeEvent[],
+  want: boolean,
+  io: Io,
+  style: Style,
+): Promise<string | undefined> {
+  if (!want) return undefined;
+  try {
+    return await writeTrajectoryFile(workspaceRoot, sessionId, events);
+  } catch (error) {
+    io.err(
+      `${style.warn('trajectory not written:')} ${error instanceof Error ? error.message : String(error)}\n`,
+    );
+    return undefined;
   }
 }
 

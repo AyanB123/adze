@@ -19,6 +19,8 @@
 export { buildProgram, run } from './cli.js';
 export type { ApplyOptions } from './commands/apply.js';
 export { runApply } from './commands/apply.js';
+export type { ChatOptions } from './commands/chat.js';
+export { runChat } from './commands/chat.js';
 export type { DoctorOptions } from './commands/doctor.js';
 export { runDoctor } from './commands/doctor.js';
 export type {
@@ -35,6 +37,10 @@ export {
   runPluginRemove,
   runPluginValidate,
 } from './commands/plugin.js';
+export type { RunOptions } from './commands/run.js';
+export { runRun } from './commands/run.js';
+export type { SessionsListOptions } from './commands/sessions.js';
+export { runSessionsList } from './commands/sessions.js';
 export type { ValidateOptions } from './commands/validate.js';
 export { runValidate } from './commands/validate.js';
 export type { ExitCode, Io, Style } from './output.js';
