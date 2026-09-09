@@ -57,7 +57,6 @@ import {
   buildCompactSummary,
   countTurns,
   loadSession,
-  newPersistedId,
   type PersistedEpochRoll,
   resolveSessionRef,
   SESSION_FILE_VERSION,
@@ -814,8 +813,4 @@ async function handleDoctor(ctx: SlashContext): Promise<void> {
   const { io, agent } = ctx;
   const { runDoctor } = await import('./doctor.js');
   await runDoctor({ __testHooks: { cwd: agent.workspaceRoot } }, io);
-}
-
-export function __testOnlyNewPersistedId(): string {
-  return newPersistedId();
 }
