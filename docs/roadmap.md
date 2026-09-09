@@ -61,7 +61,11 @@ recorded here rather than left to be discovered.
    anywhere.** `@adze/sandbox` has landed, and where a mechanism exists it is
    real: Seatbelt on macOS, bubblewrap on Linux, and opt-in Docker each deny
    writes outside the writable roots, deny network, and contain the subprocess
-   tree, reporting `os-level` enforcement. On **Windows there is nothing** — no
+   tree, reporting `os-level` enforcement. The CLI wires these brokers into `run`,
+   `chat`, and `doctor` — every containment claim is read from the plan the
+   selected broker reports — so `os-level` is what a user gets on a macOS or
+   Linux host with a usable mechanism, not only what the package can do. On
+   **Windows there is nothing** — no
    restricted token, no job object, no AppContainer, because none of the three is
    reachable through `child_process.spawn`. A Windows plan reports `gate-only`,
    and what protects the machine there is the permission gate alone. In every

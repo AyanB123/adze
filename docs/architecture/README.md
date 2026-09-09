@@ -7,12 +7,12 @@ This document describes how Adze is put together and why. It is the map; the
 > **This document describes the intended architecture, and some of it is not built
 > yet.** As of 2026-08-29 the protocol, engine, applier, provider gateway,
 > retrieval, CLI, and embedding SDK are committed and their suites pass. The
-> sandbox, plugin host, MCP client and server, and every surface other than the CLI
+> plugin host, MCP client and server, and every surface other than the CLI
 > are not.
 > Sections below flag the gap where it exists, and [the roadmap](../roadmap.md)
 > carries the authoritative per-package status. Two things worth knowing before
-> reading further: **there is no OS-level sandbox containment on any platform**,
-> and **the performance targets in §9 have not been measured**.
+> reading further: **OS-level sandbox containment holds on macOS and Linux where
+> the mechanism is usable, and not on Windows**, and **the performance targets in §9 have not been measured**.
 
 - [1. Design goals](#1-design-goals)
 - [2. The one structural decision that matters](#2-the-one-structural-decision-that-matters)
@@ -120,7 +120,7 @@ graph TB
         PROV["@adze/providers<br/>model gateway"]
         APPLY["@adze/apply<br/>3-tier edit applier"]
         RETR["@adze/retrieval<br/>ripgrep · tree-sitter<br/>(vectors deferred)"]
-        SAND["@adze/sandbox<br/>per-OS brokers<br/>(not built)"]
+        SAND["@adze/sandbox<br/>per-OS brokers<br/>(Windows excepted)"]
         MCPC["@adze/mcp<br/>MCP client<br/>(in progress)"]
     end
 
@@ -191,7 +191,7 @@ graph LR
 | `@adze/providers` | Model routing, streaming, token and cost accounting, cache-aware pricing | Internal | ✅ |
 | `@adze/apply` | Three-tier edit application with parse validation | Semver-strict from 0.2 | ✅ |
 | `@adze/retrieval` | ripgrep, tree-sitter symbols, hybrid RRF ranking; local vectors deferred | Internal | ✅ except vectors |
-| `@adze/sandbox` | Per-OS containment, `writableRoots`, command policy | Internal | ❌ no code |
+| `@adze/sandbox` | Per-OS containment, `writableRoots`, command policy | Internal | ✅ Landed, Windows excepted |
 | `@adze/mcp` | MCP client and server, both transports | Tracks MCP spec | 🚧 in progress |
 | `@adze/plugin-sdk` | Manifest schema, hook bus, WASM host, authoring types | Semver-strict from 0.2 | ❌ no code |
 | `@adze/cli` | `adze` binary; plain text, TUI deferred | User-facing | ✅ |
@@ -391,22 +391,24 @@ Two orthogonal axes, because collapsing them is what produces approval fatigue:
 Plus command-prefix rules (`allow` / `prompt` / `forbid`) so a specific command
 can be permitted without widening the whole boundary.
 
-**The gate is implemented; the containment is not.** The two-axis model above,
+**The gate is implemented, and the containment is wired in the CLI.** The two-axis model above,
 the approval flow, and the command-prefix rules live in `@adze/core`, and every
 tool call passes through them with no code path around it. `@adze/sandbox`
-contains no code, so there is **no OS-level containment on any platform** —
-macOS Seatbelt and Linux bubblewrap are planned backends that have not been
-written, and Windows has no mature OSS option at all.
+implements the Seatbelt, bubblewrap, and opt-in Docker brokers, and the CLI
+selects one per host and hands it to the engine — so on macOS and Linux with a
+usable mechanism there is OS-level containment underneath the gate, while
+Windows has no mature OSS option at all.
 
 The practical consequence, which the CLI states at runtime rather than leaving in
-a document: a command that the gate approves runs unconfined. The gate decides
-*whether* a command runs; nothing currently constrains what it touches once it
-does. An approval should be treated as equivalent to running the command
-yourself.
+a document: on a host with no usable mechanism, a command that the gate approves
+runs unconfined. The gate decides *whether* a command runs; only a wired
+mechanism constrains what it touches once it does. On such a host an approval
+should be treated as equivalent to running the command yourself.
 
 The Windows half of this is a gap across the entire OSS agent ecosystem and is on
 the roadmap as a differentiator rather than a footnote. The macOS and Linux half
-is simply not done yet.
+is wired: `adze doctor` reports `os-level` where the mechanism is usable and
+`gate-only` with the reason named where it is not.
 [ADR-0007](adr/0007-sandbox-and-permissions.md).
 
 ### 6.5 Plugin host
@@ -519,13 +521,15 @@ prompt injection.** We claim that a successful injection still cannot execute an
 unapproved command, because everything crosses the same gate and the gate answers
 to user configuration rather than to model output.
 
-Two of the three enforcement boxes above are not implemented. The **permission
-gate** is real and every tool call passes through it. The **OS sandbox** does not
-exist on any platform, and **WASM isolation** does not exist because there is no
-plugin host to isolate. So the keepable claim today is narrower still: an
+Two of the three enforcement boxes above are not implemented everywhere. The **permission
+gate** is real and every tool call passes through it. The **OS sandbox** is wired
+into the CLI on macOS and Linux where the mechanism is usable, and does not
+exist on Windows, and **WASM isolation** does not exist because there is no
+plugin host to isolate. So the keepable claim on a host without containment is
+narrower still: an
 injection cannot get a command *approved*, but an approved command is not confined
 once it runs. The diagram shows the intended defence in depth; presently only its
-first layer is built.
+first layer is built everywhere.
 
 Credentials live in the model gateway. They are never placed in model context,
 tool arguments, or trajectory logs, and artifacts are scrubbed before write.

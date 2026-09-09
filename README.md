@@ -30,9 +30,12 @@ branded IDE — all Apache-2.0, all running the same engine, all local-first by 
 > provider gateway, local retrieval, and the CLI — `run`, `chat`, `apply`,
 > `validate`, `doctor`, `models`. 904 tests pass across those six packages.
 >
-> **Three things a reader would reasonably assume and should not.** There is **no
-> OS-level sandbox containment on any platform** — not Windows, and not macOS or
-> Linux either; the permission gate is the only enforcement that exists.
+> **Three things a reader would reasonably assume and should not.** OS-level
+> sandbox containment holds only where the CLI can wire a kernel mechanism:
+> macOS with `sandbox-exec` and Linux with usable bubblewrap report `os-level`,
+> while Windows is `gate-only` — there the permission gate is the only
+> enforcement that exists. `adze doctor` reports which boundary the current
+> machine gets.
 > **No benchmark result has been published.** And **no one has yet verified a
 > live end-to-end `adze run` against a real model with a valid API key** — the
 > code path is exercised and its error handling is tested, but the successful case
@@ -146,13 +149,16 @@ Adze uses a two-axis permission model — sandbox mode crossed with approval pol
 machine. That gate is implemented in `@adze/core`, and every tool call passes
 through it with no code path around it.
 
-**The OS-level layer beneath it does not exist yet, on any platform.**
-`@adze/sandbox` contains no code. macOS Seatbelt and Linux bubblewrap are the
-planned backends and are not written; Windows has no mature OSS option and is
-**a gap across the entire OSS agent ecosystem**, which is why we treat it as a
-first-class roadmap target rather than a footnote. Until those land, an approved
-command runs unconfined everywhere, and `adze doctor` and `adze run` both say so
-at runtime. Treat an approval as you would treat running the command yourself.
+**The OS-level layer beneath it exists where the platform provides one.**
+`@adze/sandbox` implements Seatbelt (macOS), bubblewrap (Linux), and opt-in
+Docker brokers, and the CLI wires them into `run`, `chat`, and `doctor` — so on
+macOS and Linux with a usable mechanism, an approved command still runs confined
+to the writable roots with network denied. Windows has no mature OSS option and
+is **a gap across the entire OSS agent ecosystem**, which is why we treat it as a
+first-class roadmap target rather than a footnote. Until it lands, an approved
+command on Windows runs unconfined, and `adze doctor` and `adze run` both say so
+at runtime. On any host without a usable mechanism, treat an approval as you
+would treat running the command yourself.
 See [ADR-0007](docs/architecture/adr/0007-sandbox-and-permissions.md).
 
 ## What Adze will not do
@@ -215,7 +221,7 @@ Status column reflects committed code, not intent.
 | `packages/cli` | The `adze` command. Plain text; no TUI yet. | ✅ Landed |
 | `packages/mcp` | MCP client and server. Adze is addressable as an MCP server. | 🚧 In progress |
 | `apps/vscode` | VS Code / Cursor / Windsurf extension. | 🚧 In progress |
-| `packages/sandbox` | Per-OS sandbox brokers. **No code yet — no containment anywhere.** | ⬜ Empty |
+| `packages/sandbox` | Per-OS sandbox brokers. Seatbelt, bubblewrap, and opt-in Docker confine; Windows is gate-only. | ✅ Landed, Windows excepted |
 | `packages/plugin-sdk` | Plugin manifest schema, host, and authoring API. | ⬜ Empty |
 | `packages/sdk` | Public embeddable SDK for building your own surface. | ⬜ Empty |
 | `apps/ide` | Code-OSS patch series and build pipeline. Not a vendored fork. | ⬜ Empty |
