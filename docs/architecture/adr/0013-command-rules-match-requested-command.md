@@ -9,8 +9,10 @@
 The permission gate supports command-prefix rules — `allow`, `prompt`, `forbid` —
 so a specific command can be permitted or refused without moving the whole sandbox
 boundary. [ADR-0007](0007-sandbox-and-permissions.md) makes them load-bearing:
-because no platform ships OS-level containment today, every command reaches the
-gate as `gate-only` and is prompted, and the gate's own documentation names prefix
+because the shipped product is `gate-only` on every platform today — the Seatbelt
+and bubblewrap mechanisms ADR-0007 names exist on macOS and Linux, but no shipped
+surface wires them — every command reaches the gate as `gate-only` and is
+prompted, and the gate's own documentation names prefix
 rules as the intended remedy, with `npm test` as the worked example.
 
 They did not work.
