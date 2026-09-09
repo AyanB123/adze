@@ -1,0 +1,148 @@
+{
+  "schemaVersion": 1,
+  "suite": "m1-openrouter",
+  "planRef": "P2.6",
+  "startedAt": "2026-09-09",
+  "runs": [
+    {
+      "id": "run-01-scratch-fix",
+      "task": "M1-style: fix the failing test in a scratch git repo (duration parser threw on unparseable input instead of returning null)",
+      "prompt": "fix the failing test",
+      "workspace": "scratch git repo outside the monorepo (fixture copied to trajectories/scratch-fixture/)",
+      "sandbox": "workspace-write",
+      "approval": "never",
+      "maxSteps": 25,
+      "exitCode": 0,
+      "stopReason": "end-turn",
+      "steps": 5,
+      "durationMs": 48847,
+      "usage": {
+        "inputTokens": 11606,
+        "cachedInputTokens": 7744,
+        "outputTokens": 1707,
+        "reasoningTokens": 1092,
+        "cacheHitRate": 0.4002067183462532,
+        "totalTokens": 21057
+      },
+      "cost": null,
+      "costKnown": false,
+      "costNote": "unpriced OpenRouter free-tier model; null is the honest report, not $0.00",
+      "tools": {
+        "started": 8,
+        "byName": { "glob": 2, "read": 4, "edit": 1, "task": 1 },
+        "denied": 2,
+        "deniedDetail": "both bash, refused by the permission gate (workspace-write has no OS-level containment on Windows; approval never refuses rather than escalating); one in the main turn, one in a subagent",
+        "editsProposed": 1,
+        "editsApplied": 1,
+        "malformedEdits": 0,
+        "editRefusals": 0,
+        "appliedEdit": {
+          "tier": "search-replace",
+          "strategy": "exact",
+          "validator": "structural",
+          "tiersAttempted": 1,
+          "durationMs": 29.4349
+        }
+      },
+      "verification": "external: `node --test` 2/2 pass after the run (was 1 pass / 1 fail before); `git diff` in the scratch repo is a one-line change (throw -> return null)",
+      "trajectory": "trajectories/run-01-scratch-fix.jsonl"
+    },
+    {
+      "id": "run-02a-readonly-summary",
+      "task": "breadth, read-only: summarise packages/retrieval (public entry points, grammar loading) without editing anything",
+      "prompt": "Summarise what packages/retrieval does: its public entry points and how grammars are loaded. Do not edit anything.",
+      "workspace": "this repository",
+      "sandbox": "read-only",
+      "approval": "never",
+      "maxSteps": 25,
+      "exitCode": 0,
+      "stopReason": "end-turn",
+      "steps": 5,
+      "durationMs": 285152,
+      "usage": {
+        "inputTokens": 85992,
+        "cachedInputTokens": 104768,
+        "outputTokens": 5969,
+        "reasoningTokens": 3974,
+        "cacheHitRate": 0.5492136716292724,
+        "totalTokens": 196729
+      },
+      "cost": null,
+      "costKnown": false,
+      "costNote": "unpriced OpenRouter free-tier model; null is the honest report, not $0.00",
+      "tools": {
+        "started": 18,
+        "byName": { "glob": 1, "grep": 1, "read": 16 },
+        "denied": 0,
+        "editsProposed": 0,
+        "editsApplied": 0,
+        "malformedEdits": 0,
+        "editRefusals": 0
+      },
+      "verification": "git status shows no change from this run (the only modification, docs/plan.md, predates it and was untouched)",
+      "trajectory": "trajectories/run-02a-readonly-summary.jsonl"
+    },
+    {
+      "id": "run-02b-doc-fix",
+      "task": "breadth, one small real fix: a minimal typo/staleness fix in docs/ (excluding docs/plan.md)",
+      "prompt": "Find exactly one typo or stale wording in docs/ (do not touch docs/plan.md), fix it with a minimal edit of a few lines, and stop. Do not run any commands; do not touch code.",
+      "workspace": "this repository",
+      "sandbox": "workspace-write",
+      "approval": "never",
+      "maxSteps": 15,
+      "exitCode": 0,
+      "stopReason": "end-turn",
+      "steps": 4,
+      "durationMs": 89501,
+      "usage": {
+        "inputTokens": 99737,
+        "cachedInputTokens": 98944,
+        "outputTokens": 2574,
+        "reasoningTokens": 1071,
+        "cacheHitRate": 0.49800433861315374,
+        "totalTokens": 201255
+      },
+      "cost": null,
+      "costKnown": false,
+      "costNote": "unpriced OpenRouter free-tier model; null is the honest report, not $0.00",
+      "tools": {
+        "started": 28,
+        "byName": { "glob": 1, "read": 26, "edit": 1 },
+        "denied": 0,
+        "editsProposed": 1,
+        "editsApplied": 1,
+        "malformedEdits": 0,
+        "editRefusals": 0,
+        "appliedEdit": {
+          "path": "docs/guides/getting-started.md",
+          "tier": "search-replace",
+          "strategy": "exact",
+          "validator": "none",
+          "validatorNote": "no validator for 'md'; honestly reported by the applier",
+          "tiersAttempted": 1,
+          "durationMs": 1.843
+        }
+      },
+      "verification": "operator-reviewed git diff: replaced the stale 'No live end-to-end adze run has been witnessed / M1 unmet' paragraph with the demonstrated-run wording that matches docs/roadmap.md. Kept as a separate commit. Doc-only change; the agent could not run lint/tests itself (bash is denied under approval never on Windows without OS containment).",
+      "trajectory": "trajectories/run-02b-doc-fix.jsonl"
+    }
+  ],
+  "totals": {
+    "runs": 3,
+    "finished": 3,
+    "infraErrors": 0,
+    "timeouts": 0,
+    "malformedEdits": 0,
+    "editRefusals": 0,
+    "toolDenials": 2,
+    "usage": {
+      "inputTokens": 197335,
+      "cachedInputTokens": 211456,
+      "outputTokens": 10250,
+      "reasoningTokens": 6137,
+      "totalTokens": 418041
+    },
+    "cost": null,
+    "costKnown": false
+  }
+}

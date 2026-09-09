@@ -13,6 +13,7 @@
       "!**/.turbo",
       "!apps/ide/vscode",
       "!bench/.runs",
+      "!bench/reports/**/trajectories",
       "!**/*.generated.ts",
       "!**/src/generated"
     ]

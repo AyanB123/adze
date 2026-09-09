@@ -1,0 +1,40 @@
+{
+  "suite": "m1-openrouter",
+  "planRef": "P2.6",
+  "harnessVersion": "adze-cli 0.0.1",
+  "reportSchemaVersion": 1,
+  "environment": {
+    "node": "v25.5.0",
+    "platform": "win32",
+    "arch": "x64",
+    "osRelease": "10.0.26200"
+  },
+  "model": {
+    "id": "openai-compatible/nex-agi/nex-n2.5-pro:free",
+    "via": "OpenRouter OpenAI-compatible endpoint",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "temperature": null,
+    "temperatureNote": "unset; provider default applies",
+    "effort": null,
+    "maxOutputTokens": null,
+    "seed": null,
+    "seedNote": "the CLI exposes no seed flag; runs are unseeded single attempts"
+  },
+  "credentialEnvVars": ["ADZE_COMPATIBLE_BASE_URL", "ADZE_COMPATIBLE_API_KEY"],
+  "secretHandling": "key passed ONLY via inline PowerShell env vars in the invoking command and removed from the environment in the same command. Never written to disk, never committed. All staged files scanned for the key prefix before commit (0 matches).",
+  "invocations": [
+    "$env:ADZE_COMPATIBLE_BASE_URL='https://openrouter.ai/api/v1'; $env:ADZE_COMPATIBLE_API_KEY='<redacted>'; node packages/cli/bin/adze.mjs run --model openai-compatible/nex-agi/nex-n2.5-pro:free --approval never --max-steps 25 --json \"fix the failing test\" -C <scratch-git-repo>; Remove-Item Env:ADZE_COMPATIBLE_API_KEY; Remove-Item Env:ADZE_COMPATIBLE_BASE_URL",
+    "$env:ADZE_COMPATIBLE_BASE_URL='https://openrouter.ai/api/v1'; $env:ADZE_COMPATIBLE_API_KEY='<redacted>'; node packages/cli/bin/adze.mjs run --model openai-compatible/nex-agi/nex-n2.5-pro:free --sandbox read-only --approval never --max-steps 25 --json \"Summarise what packages/retrieval does: its public entry points and how grammars are loaded. Do not edit anything.\"; Remove-Item Env:ADZE_COMPATIBLE_API_KEY; Remove-Item Env:ADZE_COMPATIBLE_BASE_URL",
+    "$env:ADZE_COMPATIBLE_BASE_URL='https://openrouter.ai/api/v1'; $env:ADZE_COMPATIBLE_API_KEY='<redacted>'; node packages/cli/bin/adze.mjs run --model openai-compatible/nex-agi/nex-n2.5-pro:free --approval never --max-steps 15 --json \"Find exactly one typo or stale wording in docs/ (do not touch docs/plan.md), fix it with a minimal edit of a few lines, and stop. Do not run any commands; do not touch code.\"; Remove-Item Env:ADZE_COMPATIBLE_API_KEY; Remove-Item Env:ADZE_COMPATIBLE_BASE_URL"
+  ],
+  "invocationNote": "verbatim except the key value, which is replaced with <redacted> here and in every committed file",
+  "inputSource": "manual",
+  "inputSourceNote": "hand-made scratch fixture plus two operator-written prompts against this repository; no borrowed dataset, so there is no upstream task set to audit",
+  "attemptsPerTask": 1,
+  "containerDigest": null,
+  "containerNote": "no container; the agent ran on the host. Two-container isolation does not exist yet (roadmap M5).",
+  "resourceBand": null,
+  "resourceNote": "no floor or ceiling pinned; durations are orientation only",
+  "runDate": "2026-09-09",
+  "runDateNote": "single date; the policy asks for multiple run dates for published pass rates, which this report does not claim"
+}
