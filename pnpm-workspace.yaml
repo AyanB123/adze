@@ -1,11 +1,17 @@
 packages:
   - "packages/*"
   - "apps/vscode"
-  - "apps/hub"
   - "bench/harness"
-  - "bench/suites/*"
-  - "plugins/*"
   - "examples/*"
+
+# Deliberately NOT listed, so the globs above always resolve:
+# - "apps/hub": no package.json yet. The directory holds no source (M7 has not
+#   started; see docs/roadmap.md). Re-add when the registry index service lands.
+# - "bench/suites/*": apply-bench is cases-only with no package.json, and
+#   nep-bench does not exist yet (M6). Re-add when a suite ships runnable code.
+# - "plugins/*": first-party plugins are deliberately not workspace packages.
+#   They share the root install and run from their own vitest root
+#   (`pnpm test:plugins`), which Turborepo cannot see. Keep it that way.
 
 # Single source of truth for dependency versions across every workspace package.
 # Adding a dep? Put the version here and reference it as `catalog:` from the
