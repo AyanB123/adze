@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/AyanB123/adze/blob/main/packages/cli/config.schema.json",
+  "title": "Adze workspace/user config (.adze/config.jsonc)",
+  "description": "JSONC (// and /* */ comments allowed). Credentials never live here — they belong in .adze/providers.json or the environment. Precedence: CLI flags > environment > workspace .adze/config.jsonc > ~/.adze/config.jsonc > defaults. See docs/guides/configuration.md.",
+  "type": "object",
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Schema reference for editors. Ignored by the loader."
+    },
+    "engines": {
+      "type": "object",
+      "description": "Engine version this file was written for. Stamped by `chat /init`; a mismatch warns.",
+      "properties": {
+        "adze": {
+          "type": "string",
+          "description": "Adze engine version, e.g. \"0.0.1\".",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "engine": {
+      "type": "object",
+      "description": "Model selection. Env overrides: ADZE_MODEL, ADZE_EFFORT, ADZE_TEMPERATURE, ADZE_MAX_TOKENS, ADZE_MAX_OUTPUT_TOKENS.",
+      "properties": {
+        "model": {
+          "type": "string",
+          "description": "provider/model, e.g. \"anthropic/claude-sonnet-4-5\".",
+          "minLength": 1
+        },
+        "effort": {
+          "type": "string",
+          "description": "Reasoning effort (OpenAI-style; Anthropic models do not accept it).",
+          "enum": ["minimal", "low", "medium", "high"]
+        },
+        "temperature": {
+          "type": "number",
+          "description": "Sampling temperature, 0 to 2.",
+          "minimum": 0,
+          "maximum": 2
+        },
+        "maxTokens": {
+          "type": "integer",
+          "description": "Budget ceiling: total tokens for the turn. Omitted when unbounded.",
+          "exclusiveMinimum": 0
+        },
+        "maxOutputTokens": {
+          "type": "integer",
+          "description": "Per-request cap forwarded to the provider.",
+          "exclusiveMinimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "sandbox": {
+      "type": "object",
+      "description": "What the agent may do. Env overrides: ADZE_SANDBOX_BROKER, ADZE_SANDBOX_MODE, ADZE_WRITABLE_ROOTS, ADZE_ALLOWED_HOSTS. Semantics per ADR-0007; invalid mode narrows to read-only.",
+      "properties": {
+        "broker": {
+          "type": "string",
+          "description": "Mechanism preference. auto (default) selects per platform; an explicit value is validated, reported by doctor, and warns when the host selects otherwise.",
+          "enum": ["auto", "seatbelt", "bubblewrap", "docker", "windows-partial", "none"]
+        },
+        "mode": {
+          "type": "string",
+          "enum": ["read-only", "workspace-write", "full-access"],
+          "default": "workspace-write"
+        },
+        "writableRoots": {
+          "type": "array",
+          "description": "Absolute paths writable under workspace-write. The workspace root is always included by the CLI; these widen it. Relative entries are ignored with a warning.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "allowedNetworkHosts": {
+          "type": "array",
+          "description": "Hosts reachable when the mode would otherwise deny network. Exact host match.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "approvals": {
+      "type": "object",
+      "description": "When the user is asked. Env overrides: ADZE_APPROVAL_POLICY (ADZE_APPROVAL also read). never refuses rather than escalating. Invalid policy narrows to never.",
+      "properties": {
+        "policy": {
+          "type": "string",
+          "enum": ["untrusted", "on-request", "never"],
+          "default": "on-request"
+        }
+      },
+      "additionalProperties": false
+    },
+    "commandRules": {
+      "type": "object",
+      "description": "Per-command overrides, matched as a prefix of the requested command (ADR-0013). Env: ADZE_ALLOW, ADZE_FORBID, ADZE_PROMPT (comma-separated). A lower layer never weakens a higher layer's forbid into an allow.",
+      "properties": {
+        "allow": {
+          "type": "array",
+          "description": "Permitted without asking.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "forbid": {
+          "type": "array",
+          "description": "Refused outright, never offered for approval. Beats every mode including full-access.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "prompt": {
+          "type": "array",
+          "description": "Always ask. Protocol-level; the CLI flags do not emit it.",
+          "items": { "type": "string", "minLength": 1 }
+        }
+      },
+      "additionalProperties": false
+    },
+    "plugins": {
+      "type": "object",
+      "description": "Procedural plugin runtimes need an explicit opt-in: a JS/native module runs unsandboxed with the engine's full privileges. Env: ADZE_ALLOW_UNSANDBOXED_JS, ADZE_ALLOW_NATIVE, ADZE_ON_HOOK_FAILURE.",
+      "properties": {
+        "allowUnsandboxedJs": {
+          "type": "boolean",
+          "description": "Required to load runtime js hooks/providers. Default false.",
+          "default": false
+        },
+        "allowNative": {
+          "type": "boolean",
+          "description": "Required to load runtime native modules. Default false, never enabled silently.",
+          "default": false
+        },
+        "onHookFailure": {
+          "type": "string",
+          "description": "What a failing policy hook does. refuse (default) fails closed.",
+          "enum": ["refuse", "warn"],
+          "default": "refuse"
+        },
+        "dirs": {
+          "type": "array",
+          "description": "Extra directories to load plugins from.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "enable": {
+          "type": "array",
+          "description": "Plugin ids to enable. Empty means no filter.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "disable": {
+          "type": "array",
+          "description": "Plugin ids to disable. Wins over enable on overlap.",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "config": {
+          "type": "object",
+          "description": "Per-plugin opaque settings, keyed by plugin id."
+        }
+      },
+      "additionalProperties": false
+    },
+    "workflows": {
+      "type": "object",
+      "description": "Workflow packs. Env: ADZE_DEFAULT_PACK.",
+      "properties": {
+        "todo": {
+          "type": "boolean",
+          "description": "Whether the todo planning tool is available. Default true.",
+          "default": true
+        },
+        "defaultPack": {
+          "type": "string",
+          "description": "Default workflow pack id.",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "gallery": {
+      "type": "object",
+      "description": "Extension gallery. Only Open VSX: a Microsoft Marketplace URL is rejected per ADR-0009. Env: ADZE_OPENVSX_URL.",
+      "properties": {
+        "openVsxUrl": {
+          "type": "string",
+          "description": "Open VSX registry URL, e.g. https://open-vsx.org. Never the Microsoft Marketplace.",
+          "minLength": 1
+        }
+      },
+      "additionalProperties": false
+    },
+    "defaultModel": {
+      "type": ["string", "null"],
+      "description": "Deprecated alias for engine.model. Warns when used with a value.",
+      "minLength": 1
+    }
+  },
+  "additionalProperties": false
+}
