@@ -3,7 +3,7 @@
  * `adze-bench` — the benchmark entry point.
  *
  * Wired to the root scripts `bench:apply`, `bench:polyglot`, `bench:index`,
- * and `bench:list`.
+ * `bench:swe-smoke`, and `bench:list`.
  *
  * Argument parsing is hand-rolled rather than using commander, so that `bench/`
  * carries no dependency the product does not already have. Two subcommands and four
@@ -44,8 +44,8 @@ Usage:
 
 Options:
   --suite <name>   suite under bench/suites (default: apply-bench for apply/list,
-                   index-bench for index; polyglot-bench, swe-smoke also run
-                   under apply)
+                   index-bench for index; polyglot-bench and swe-smoke also run
+                   under apply; swe-smoke reports are refused publication)
   --filter <text>  only cases whose id, tag, or description contains <text>
   --out <dir>      write the run here (default: bench/.runs/<stamp>-<suite>)
   --no-write       run and print, write nothing
@@ -217,10 +217,15 @@ async function finishRun(outcome, suite) {
 }
 
 function printCaveat(suite) {
-  // Polyglot states edit format rather than the applier, and index states local
-  // retrieval with non-comparable latency, because that is what each report's
-  // limitations section states and the terminal line must agree with the report.
-  if (suite === 'polyglot-bench') {
+  // Each suite states what its report's limitations section states, because the
+  // terminal line must agree with the report. Swe-smoke refuses publication, so
+  // its caveat is a prohibition rather than a description.
+  if (suite === 'swe-smoke') {
+    process.stdout.write(
+      '\nWiring check only — its number must never be published or quoted.\n' +
+        'Tier-2 is blocked on Harbor, a dataset, and a container runtime.\n',
+    );
+  } else if (suite === 'polyglot-bench') {
     process.stdout.write(
       '\nThis suite measures edit format against hand-written edits sampled from the\n' +
         'Aider Polyglot shape (40 of 225). It is not a measurement of any model,\n' +

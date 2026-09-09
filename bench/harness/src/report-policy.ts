@@ -28,10 +28,14 @@
  * ## What is enforced here, and what is not yet
  *
  * Enforced: report integrity, the deterministic/stochastic distinction, model-pin
- * honesty, and — through `checkCitation` — that the report's own provenance is
- * citable. That last one is real rather than decorative: a run whose harness version
- * or invocation is empty is not reproducible, and the policy requires the exact
- * command for every number we publish.
+ * honesty, the wiring-check refusal — and through `checkCitation` — that the
+ * report's own provenance is citable. That last one is real rather than decorative:
+ * a run whose harness version or invocation is empty is not reproducible, and the
+ * policy requires the exact command for every number we publish. The wiring-check
+ * refusal is the same construction keyed on the suite name: a `swe-smoke` report
+ * carries `wiring-check-not-publishable` no matter how green its cases, because a
+ * wiring check whose report could pass the gate would become a result the first
+ * time someone quoted it.
  *
  * Not enforced, because a Tier-1 report carries no input for them:
  * `compareToBaseline` needs a published baseline and `looksLikeMaxOverN` needs more
@@ -97,7 +101,14 @@ export type PolicyViolationCode =
   /** Synthetic inputs while listing model pins. */
   | 'synthetic-claim-with-model-pins'
   /** The report cannot cite itself: no pinned harness version, or no invocation. */
-  | 'provenance-not-citable';
+  | 'provenance-not-citable'
+  /**
+   * A wiring-check report that must never be published. `swe-smoke` exercises the
+   * Tier-1 pipeline end to end against placeholders, not SWE-bench tasks, and its
+   * number is unquotable by N18 — a wiring check whose report could pass the gate
+   * would become a result the first time someone quoted it.
+   */
+  | 'wiring-check-not-publishable';
 
 export interface PolicyViolation {
   readonly code: PolicyViolationCode;
@@ -257,6 +268,28 @@ function checkMeasurementClaims(report: BenchReport, add: (v: PolicyViolation) =
 }
 
 /**
+ * Whether the report is a wiring check whose number must never be quoted.
+ *
+ * `swe-smoke` runs the Tier-1 pipeline against 25 placeholders to prove the
+ * wiring works while Tier-2 waits on Harbor, a dataset, and a container
+ * runtime. Its cases pass by construction, so without this rule a green run
+ * would read as a result. With it, every swe-smoke report carries its refusal
+ * above every number and `adze-bench` exits 3 — which is the passing condition
+ * CI asserts.
+ */
+function checkWiringOnly(report: BenchReport, add: (v: PolicyViolation) => void): void {
+  if (report.suite !== 'swe-smoke') return;
+  add({
+    code: 'wiring-check-not-publishable',
+    message:
+      'this is a wiring check, not a measurement: its 25 cases are placeholders, not ' +
+      'SWE-bench tasks, and Tier-2 is blocked on Harbor, a dataset, and a container ' +
+      'runtime. Its number must never be published or quoted — not in a PR, not in ' +
+      'docs, not as "25/25 on SWE-smoke" — per N18 and docs/benchmarks/strategy.md.',
+  });
+}
+
+/**
  * Whether this report may be published, and if not, precisely why.
  *
  * Every violation is collected rather than returning at the first, because a
@@ -270,6 +303,7 @@ export function checkReportPolicy(report: BenchReport): ReportPolicyCheck {
 
   checkIntegrity(report, add);
   checkMeasurementClaims(report, add);
+  checkWiringOnly(report, add);
 
   const citation = checkCitation(harnessCitation(report));
   if (!citation.ok) {

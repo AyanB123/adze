@@ -1,0 +1,346 @@
+{
+  "cases": [
+    {
+      "id": "swe-wiring-01",
+      "description": "Wiring case 01: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring01.ts",
+      "original": ["const wiring01 = 1;", "export default wiring01;", ""],
+      "edits": [{ "search": "const wiring01 = 1;", "replace": "const wiring01 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring01 = 2;", "export default wiring01;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-02",
+      "description": "Wiring case 02: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring02.ts",
+      "original": ["const wiring02 = 1;", "export default wiring02;", ""],
+      "edits": [{ "search": "const wiring02 = 1;", "replace": "const wiring02 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring02 = 2;", "export default wiring02;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-03",
+      "description": "Wiring case 03: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring03.ts",
+      "original": ["const wiring03 = 1;", "export default wiring03;", ""],
+      "edits": [{ "search": "const wiring03 = 1;", "replace": "const wiring03 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring03 = 2;", "export default wiring03;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-04",
+      "description": "Wiring case 04: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring04.ts",
+      "original": ["const wiring04 = 1;", "export default wiring04;", ""],
+      "edits": [{ "search": "const wiring04 = 1;", "replace": "const wiring04 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring04 = 2;", "export default wiring04;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-05",
+      "description": "Wiring case 05: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring05.ts",
+      "original": ["const wiring05 = 1;", "export default wiring05;", ""],
+      "edits": [{ "search": "const wiring05 = 1;", "replace": "const wiring05 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring05 = 2;", "export default wiring05;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-06",
+      "description": "Wiring case 06: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring06.ts",
+      "original": ["const wiring06 = 1;", "export default wiring06;", ""],
+      "edits": [{ "search": "const wiring06 = 1;", "replace": "const wiring06 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring06 = 2;", "export default wiring06;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-07",
+      "description": "Wiring case 07: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring07.ts",
+      "original": ["const wiring07 = 1;", "export default wiring07;", ""],
+      "edits": [{ "search": "const wiring07 = 1;", "replace": "const wiring07 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring07 = 2;", "export default wiring07;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-08",
+      "description": "Wiring case 08: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring08.ts",
+      "original": ["const wiring08 = 1;", "export default wiring08;", ""],
+      "edits": [{ "search": "const wiring08 = 1;", "replace": "const wiring08 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring08 = 2;", "export default wiring08;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-09",
+      "description": "Wiring case 09: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring09.ts",
+      "original": ["const wiring09 = 1;", "export default wiring09;", ""],
+      "edits": [{ "search": "const wiring09 = 1;", "replace": "const wiring09 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring09 = 2;", "export default wiring09;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-10",
+      "description": "Wiring case 10: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring10.ts",
+      "original": ["const wiring10 = 1;", "export default wiring10;", ""],
+      "edits": [{ "search": "const wiring10 = 1;", "replace": "const wiring10 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring10 = 2;", "export default wiring10;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-11",
+      "description": "Wiring case 11: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring11.ts",
+      "original": ["const wiring11 = 1;", "export default wiring11;", ""],
+      "edits": [{ "search": "const wiring11 = 1;", "replace": "const wiring11 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring11 = 2;", "export default wiring11;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-12",
+      "description": "Wiring case 12: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring12.ts",
+      "original": ["const wiring12 = 1;", "export default wiring12;", ""],
+      "edits": [{ "search": "const wiring12 = 1;", "replace": "const wiring12 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring12 = 2;", "export default wiring12;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-13",
+      "description": "Wiring case 13: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring13.ts",
+      "original": ["const wiring13 = 1;", "export default wiring13;", ""],
+      "edits": [{ "search": "const wiring13 = 1;", "replace": "const wiring13 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring13 = 2;", "export default wiring13;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-14",
+      "description": "Wiring case 14: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring14.ts",
+      "original": ["const wiring14 = 1;", "export default wiring14;", ""],
+      "edits": [{ "search": "const wiring14 = 1;", "replace": "const wiring14 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring14 = 2;", "export default wiring14;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-15",
+      "description": "Wiring case 15: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring15.ts",
+      "original": ["const wiring15 = 1;", "export default wiring15;", ""],
+      "edits": [{ "search": "const wiring15 = 1;", "replace": "const wiring15 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring15 = 2;", "export default wiring15;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-16",
+      "description": "Wiring case 16: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring16.ts",
+      "original": ["const wiring16 = 1;", "export default wiring16;", ""],
+      "edits": [{ "search": "const wiring16 = 1;", "replace": "const wiring16 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring16 = 2;", "export default wiring16;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-17",
+      "description": "Wiring case 17: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring17.ts",
+      "original": ["const wiring17 = 1;", "export default wiring17;", ""],
+      "edits": [{ "search": "const wiring17 = 1;", "replace": "const wiring17 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring17 = 2;", "export default wiring17;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-18",
+      "description": "Wiring case 18: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring18.ts",
+      "original": ["const wiring18 = 1;", "export default wiring18;", ""],
+      "edits": [{ "search": "const wiring18 = 1;", "replace": "const wiring18 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring18 = 2;", "export default wiring18;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-19",
+      "description": "Wiring case 19: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring19.ts",
+      "original": ["const wiring19 = 1;", "export default wiring19;", ""],
+      "edits": [{ "search": "const wiring19 = 1;", "replace": "const wiring19 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring19 = 2;", "export default wiring19;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-20",
+      "description": "Wiring case 20: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring20.ts",
+      "original": ["const wiring20 = 1;", "export default wiring20;", ""],
+      "edits": [{ "search": "const wiring20 = 1;", "replace": "const wiring20 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring20 = 2;", "export default wiring20;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-21",
+      "description": "Wiring case 21: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring21.ts",
+      "original": ["const wiring21 = 1;", "export default wiring21;", ""],
+      "edits": [{ "search": "const wiring21 = 1;", "replace": "const wiring21 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring21 = 2;", "export default wiring21;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-22",
+      "description": "Wiring case 22: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring22.ts",
+      "original": ["const wiring22 = 1;", "export default wiring22;", ""],
+      "edits": [{ "search": "const wiring22 = 1;", "replace": "const wiring22 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring22 = 2;", "export default wiring22;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-23",
+      "description": "Wiring case 23: exact single-line edit through the full Tier-1 pipeline.",
+      "path": "src/wiring23.ts",
+      "original": ["const wiring23 = 1;", "export default wiring23;", ""],
+      "edits": [{ "search": "const wiring23 = 1;", "replace": "const wiring23 = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const wiring23 = 2;", "export default wiring23;", ""],
+        "strategy": "exact"
+      },
+      "tags": ["swe-smoke", "wiring-check"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-24",
+      "description": "Wiring case 24: a repeated block refused as ambiguous, proving refusal wiring works.",
+      "path": "src/wiring24.ts",
+      "original": ["let w = 1;", "let w = 1;", ""],
+      "edits": [{ "search": "let w = 1;", "replace": "const w = 1;" }],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["swe-smoke", "wiring-check", "refusal"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    },
+    {
+      "id": "swe-wiring-25",
+      "description": "Wiring case 25: an absent block refused as not-found, proving refusal wiring works.",
+      "path": "src/wiring25.ts",
+      "original": ["const wiring25 = 1;", ""],
+      "edits": [{ "search": "const missing = 9;", "replace": "const missing = 10;" }],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["swe-smoke", "wiring-check", "refusal"],
+      "source": "swe-smoke wiring placeholder, synthetic — not a SWE-bench task"
+    }
+  ]
+}

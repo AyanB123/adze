@@ -77,7 +77,16 @@ function limitations(report: BenchReport): string[] {
     );
   }
 
-  if (report.suite === 'index-bench') {
+  if (report.suite === 'swe-smoke') {
+    lines.push(
+      '**Wiring check only — its number must never be published.** This suite runs the',
+      'Tier-1 pipeline against 25 placeholders, not SWE-bench tasks: no dataset record,',
+      'no repository checkout, no container, no model (`inputSource: synthetic`). Tier-2',
+      'is blocked on Harbor, a dataset, and a container runtime. Do not quote its pass',
+      'rate anywhere — not in a PR, not in docs, not as "25/25 on SWE-smoke" — per N18.',
+      '',
+    );
+  } else if (report.suite === 'index-bench') {
     lines.push(
       '**These numbers measure local retrieval on this machine, not any model.** Every',
       'query is hand-written against a checked-in fixture (`inputSource: synthetic`).',

@@ -71,6 +71,28 @@ function brokenTaskAudit(report: BenchReport): string[] {
     ];
   }
 
+  if (report.suite === 'swe-smoke') {
+    return [
+      '## Broken-task audit — not applicable, and not SWE-bench tasks',
+      '',
+      'The policy requires our own broken-task audit of borrowed task sets. This suite',
+      'borrows nothing — but it also must not be mistaken for the borrowed set it',
+      'stands in for: its 25 cases are wiring placeholders exercising the Tier-1',
+      'pipeline, not SWE-bench tasks, and Tier-2 is blocked on Harbor, a dataset, and',
+      'a container runtime. There is no upstream author to disagree with and no gold',
+      'patch to verify. A placeholder that asserts the wrong thing is a bug here, fixed',
+      'by editing the case.',
+      '',
+      '### What stands in for it',
+      '',
+      'Nothing stands in for a borrowed-set audit, because there is no borrowed set.',
+      'The publication gate refuses every `swe-smoke` report as',
+      '`wiring-check-not-publishable`, so no number from this suite can be published',
+      'with or without an audit.',
+      '',
+    ];
+  }
+
   if (report.suite === 'index-bench') {
     return [
       '## Broken-task audit — not applicable',
