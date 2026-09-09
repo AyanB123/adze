@@ -174,7 +174,7 @@ graph LR
     protocol --> sdk
 ```
 
-**The rules, enforced by review and by a dependency-cruiser check in CI:**
+**The rules, enforced by review and by `bench/harness/test/reachability.test.ts` in CI:**
 
 | Rule | Why |
 | --- | --- |
@@ -198,7 +198,7 @@ graph LR
 | `@adze/sdk` | Public embedding API | Semver-strict from 1.0 | ✅ |
 
 `@adze/sdk` now exists, but the CLI predates it and still imports `@adze/core`,
-`@adze/providers`, `@adze/apply`, and `@adze/protocol` directly. That is a temporary
+`@adze/providers`, `@adze/apply`, `@adze/retrieval`, `@adze/sandbox`, and `@adze/protocol` directly. That is a temporary
 deviation from the graph above, not a revision of it, and moving the CLI onto the SDK
 is the check that the embedding API is genuinely sufficient rather than merely
 present — a public API that our own surface does not use is an API nobody has tested.
