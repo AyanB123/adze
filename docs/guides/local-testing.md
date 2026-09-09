@@ -297,9 +297,10 @@ Stated here rather than discovered later:
 
 - **No OS-level sandbox on Windows.** The subject of this whole guide.
 - **`adze apply` has no workspace confinement.** It is a direct tool, not a gated one.
-- **There is no config file for approval, sandbox, or budgets yet.** They are CLI flags,
-  which is why the launcher exists. The layered `.adze/config.jsonc` system is M2 — see
-  [the roadmap](../roadmap.md).
+- **Restrictive defaults live in flags, the launcher, or the config file.**
+  Approval, sandbox, budgets, and command rules are CLI flags; the launcher
+  applies a restrictive set, and [.adze/config.jsonc](configuration.md) persists
+  them per machine or per repository with CLI flags winning over both.
 - **The validator degrades honestly, and often to `structural`.** `adze validate` reports
   `tree-sitter` only when a real parse ran, `structural` when only the delimiter and
   indentation check ran, and `skipped` when the language was unknown. A `structural` pass

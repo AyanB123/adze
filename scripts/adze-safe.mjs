@@ -13,10 +13,11 @@
  *
  * 1. **Applies restrictive defaults** to `run` and `chat` — `--approval untrusted`,
  *    `--sandbox workspace-write`, and the three budget ceilings. These are the real
- *    CLI flags, not a parallel configuration system. The full `.adze/config.jsonc`
- *    layer is M2 (see docs/roadmap.md); until it lands, flags are the only mechanism
- *    that actually changes engine behaviour, so a launcher is the honest place to put
- *    a default.
+ *    CLI flags, not a parallel configuration system. A `.adze/config.jsonc` file
+ *    (see docs/guides/configuration.md) persists the same settings per machine or
+ *    per repository, with CLI flags — including these injected ones — winning over
+ *    it; until it exists for a user, flags are the mechanism that actually changes
+ *    engine behaviour, so a launcher is the honest place to put a default.
  *
  * 2. **Refuses to start where the work is not recoverable.** A git repository with a
  *    commit is what makes an agent's filesystem writes undoable — `git checkout .`

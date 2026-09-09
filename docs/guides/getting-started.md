@@ -324,6 +324,29 @@ Model references are always `provider/model`. A reference with no slash is refus
 rather than guessed: `gpt-5.4` through a proxy and through OpenAI are different
 endpoints, different keys, and different prices.
 
+### Persisting settings in `.adze/config.jsonc`
+
+Flags work per invocation; the config file persists them. In `chat`, `/init`
+scaffolds `.adze/config.jsonc` (JSONC — comments allowed) with every section
+documented, and stamps it with the running engine version:
+
+```jsonc
+{
+  // Precedence: CLI flags > environment > workspace file > ~/.adze/config.jsonc > defaults.
+  "engines": { "adze": "0.0.1" },
+  "engine": { "model": "ollama/qwen2.5-coder" },
+  "sandbox": { "mode": "workspace-write" },
+  "approvals": { "policy": "on-request" },
+  "commandRules": { "allow": ["pnpm test"], "forbid": ["git push"] }
+}
+```
+
+`adze doctor` reports every resolved value with its source, plus warnings for
+unknown keys and narrowed values. Full schema, environment variables, and the
+fail-closed rules are in [configuration.md](configuration.md). Credentials
+never live in this file — they stay in `.adze/providers.json` or the
+environment.
+
 ## Your first run
 
 ```bash

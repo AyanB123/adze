@@ -5,10 +5,10 @@ permitted — and **approval policy** — when you are asked. They are separate 
 purpose, and understanding why they are separate is most of understanding the model.
 
 Everything in this guide was checked against the implementation in
-`packages/core/src/permissions.ts`, `packages/cli/src/agent/flags.ts`, and
-`packages/providers/src/config.ts`, and then against the running binary. Where a
-setting is not reachable from the CLI, this guide says so instead of showing a flag
-that does not exist.
+`packages/core/src/permissions.ts`, `packages/cli/src/agent/flags.ts`,
+`packages/cli/src/config/loader.ts`, and `packages/providers/src/config.ts`, and
+then against the running binary. Where a setting is not reachable from the CLI,
+this guide says so instead of showing a flag that does not exist.
 
 The reasoning behind the model is
 [ADR-0007](../architecture/adr/0007-sandbox-and-permissions.md).
@@ -70,21 +70,24 @@ When a write lands outside those roots, the refusal names them:
 writing '<path>' needs approval: it is outside the writable roots (<roots>)
 ```
 
-> [!IMPORTANT]
-> **`writableRoots` is not reachable from the CLI.** `packages/cli/src/agent/setup.ts`
-> constructs the sandbox config with `writableRoots: []` and there is no flag to
-> change it, so under the CLI the writable set is always exactly the workspace root.
-> The same is true of `allowedNetworkHosts`.
+> [!NOTE]
+> `writableRoots` and `allowedNetworkHosts` are set from `.adze/config.jsonc`
+> (`sandbox.writableRoots`, `sandbox.allowedNetworkHosts`) or the environment
+> (`ADZE_WRITABLE_ROOTS`, `ADZE_ALLOWED_HOSTS`) — there is no CLI flag for
+> either. The CLI always keeps the workspace root in the writable set; config
+> entries widen it rather than replacing it, so adding a build directory cannot
+> silently make the workspace itself need approval. Entries must be absolute;
+> relative ones are ignored with a warning.
 >
-> Both are real, honoured fields — `@adze/core` and `@adze/sdk` read them, and
-> `@adze/sdk` validates that every root is absolute — so an embedder can set them
-> today. See [embedding.md](embedding.md). From the CLI, the intended tool for
-> widening one specific capability is a command-prefix rule, below.
+> Both are honoured fields — `@adze/core` and `@adze/sdk` read them, and
+> `@adze/sdk` validates that every root is absolute — so an embedder can set
+> them directly. See [embedding.md](embedding.md).
 
 ### `allowedNetworkHosts`
 
 Hosts reachable when the mode would otherwise deny network access. Matched by exact
-host string. Same CLI caveat as `writableRoots`.
+host string. Set from the config file or `ADZE_ALLOWED_HOSTS`, like
+`writableRoots` above.
 
 ## Axis 2 — approval policy
 
@@ -215,6 +218,28 @@ $ adze run --allow "" "x"
 adze: --allow needs a command prefix
 ```
 
+### Rules from the config file and the environment
+
+The same rules live in `.adze/config.jsonc` under `commandRules`:
+
+```jsonc
+{
+  // Comments allowed.
+  "commandRules": {
+    "allow": ["pnpm test"],
+    "forbid": ["git push"]
+  }
+}
+```
+
+`ADZE_ALLOW`, `ADZE_FORBID`, and `ADZE_PROMPT` add more as comma-separated
+lists (a prefix containing a comma belongs in the file, not the variable).
+Rules from every layer accumulate — but **a `forbid` from any layer drops an
+overlapping `allow` with a warning, regardless of layer.** An explicit
+prohibition is the strongest statement of intent available; to allow something
+forbidden, remove or narrow the `forbid` rather than outbidding it. `adze
+doctor` lists the effective rules and every warning.
+
 ## Budgets
 
 Four ceilings, all enforced by the engine and all reported in the summary.
@@ -235,6 +260,9 @@ adze: --max-steps '0' is not a positive whole number
 
 Hitting a budget ends the turn with exit code `1` and a stop reason naming which
 ceiling was hit. That is not a crash; it is the ceiling working.
+
+`--max-tokens` may also come from the config file (`engine.maxTokens`) or
+`ADZE_MAX_TOKENS`; the other three ceilings are flags only.
 
 ### `--max-spend` on an unpriced model is refused
 
@@ -292,7 +320,9 @@ adze: --effort 'ultra' is not a reasoning effort
 ```
 
 Resolution order for which model is used, most specific first: `--model`, then
-`defaultModel` in a providers file, then the provider entry's own `defaultModel`.
+`ADZE_MODEL`, then `engine.model` in the workspace `.adze/config.jsonc`, then
+`engine.model` in `~/.adze/config.jsonc`, then `defaultModel` in a providers
+file, then the provider entry's own `defaultModel`.
 
 ## Session flags
 
@@ -444,13 +474,132 @@ ambiguity is exactly why a user cannot tell which variable to set.
 unconfigured entry would be a provider that cannot work and says nothing about why.
 
 > [!NOTE]
-> **This is the provider slice of configuration, not all of it.** The full
-> `.adze/config.jsonc` system — schema, layering, and `AGENTS.md` conventions — is
-> milestone M2 in [the roadmap](../roadmap.md). What exists today is
-> `.adze/providers.json` and the flags on this page. There is no config file for
-> sandbox mode, approval policy, budgets, or command rules; pass those as flags, or
-> wrap the CLI in a launcher script the way
-> [local-testing.md](local-testing.md) does.
+> **This is the provider slice of configuration, not all of it.** Everything
+> else — model, sandbox, approvals, command rules, plugins, workflows, gallery —
+> lives in [`.adze/config.jsonc`](#adzeconfigjsonc), below. Credentials stay
+> here, never there.
+
+## `.adze/config.jsonc`
+
+The rest of configuration lives in one JSONC file (`//` and `/* */` comments
+allowed; everything else is strict JSON), read from two locations:
+
+```
+~/.adze/config.jsonc              # machine-wide default
+<workspace>/.adze/config.jsonc    # this repository's override
+```
+
+Precedence, lowest to highest: **defaults < user file < workspace file <
+environment < CLI flags.** A flag that was given always wins; an invalid value
+never falls back to something permissive (see fail-closed, below). `chat /init`
+scaffolds the workspace file with every section documented and stamps
+`engines.adze` with the running engine version, so a future version can warn
+when the file was written for something older.
+
+### Full shape
+
+```jsonc
+{
+  "$schema": "../node_modules/@adze/cli/config.schema.json",
+  "engines": { "adze": "0.0.1" },
+  "engine": {
+    "model": "anthropic/claude-sonnet-4-5", // provider/model
+    "effort": "medium", // minimal | low | medium | high (OpenAI-style)
+    "temperature": 0.7, // 0 to 2
+    "maxTokens": 200000, // budget ceiling: total tokens, omitted when unbounded
+    "maxOutputTokens": 8192 // per-request cap
+  },
+  "sandbox": {
+    "broker": "auto", // auto | seatbelt | bubblewrap | docker | windows-partial | none
+    "mode": "workspace-write", // read-only | workspace-write | full-access
+    "writableRoots": [], // absolute paths; the workspace root is always included
+    "allowedNetworkHosts": [] // exact host match
+  },
+  "approvals": {
+    "policy": "on-request" // untrusted | on-request | never
+  },
+  "commandRules": {
+    "allow": ["pnpm test"], // runs without asking
+    "forbid": ["git push"] // refused outright, never offered for approval
+  },
+  "plugins": {
+    "allowUnsandboxedJs": false, // required to load runtime: js hooks
+    "allowNative": false, // required to load runtime: native modules
+    "onHookFailure": "refuse", // refuse | warn
+    "dirs": [], // extra plugin directories
+    "enable": [], // plugin ids to enable; empty means no filter
+    "disable": [] // plugin ids to disable; wins over enable
+  },
+  "workflows": {
+    "todo": true, // whether the todo planning tool is available
+    "defaultPack": "my-pack" // default workflow pack id
+  },
+  "gallery": {
+    // Open VSX only. A Microsoft Marketplace URL is rejected per ADR-0009.
+    "openVsxUrl": "https://open-vsx.org"
+  }
+}
+```
+
+Four things about how this file behaves, all read from the implementation in
+`packages/cli/src/config/`:
+
+**Unknown keys warn loudly, never silently ignored.** A typo'd policy key that
+does nothing would be a boundary the user believes in and does not have — so
+`adze doctor` reports every unrecognised key with its dotted path and the file
+it came from, and the `run` preamble repeats them before the turn. Parsing
+continues; known values still apply.
+
+**Invalid values narrow fail-closed.** A typo'd `sandbox.mode` becomes
+`read-only` and a typo'd `approvals.policy` becomes `never`, with a warning —
+never the documented defaults, which would grant more than was asked for. An
+invalid `engine.*` value is ignored with a warning. A malformed file (bad
+JSONC syntax) refuses the run with exit code 2 and a hint, while `doctor`
+reports it as unreadable and carries on with the other sections.
+
+**A refusal is never weakened into a grant.** A `forbid` from any layer drops
+an overlapping `allow` with a warning, regardless of layer — to allow
+something forbidden, remove or narrow the `forbid`. An allow that is *narrower*
+than any prohibition (say, `allow: ["git status"]` beside `forbid: ["git
+push"]`) is unaffected: at runtime the longest matching prefix still wins, per
+[ADR-0013](../architecture/adr/0013-command-rules-match-requested-command.md).
+
+**`sandbox.broker` is a validated preference, not yet a switch.** `auto`
+(the default) keeps the current per-platform selection; an explicit value is
+checked and reported by `doctor`, and a mismatch with the selected mechanism
+warns. Pinning the mechanism is future work — the schema accepts the key now
+so files written today do not break later.
+
+### Environment variables
+
+Every scalar and list above has an environment override, which wins over both
+files:
+
+| Variable | Sets |
+| --- | --- |
+| `ADZE_MODEL` | `engine.model` |
+| `ADZE_EFFORT` | `engine.effort` |
+| `ADZE_TEMPERATURE` | `engine.temperature` |
+| `ADZE_MAX_TOKENS` | `engine.maxTokens` |
+| `ADZE_MAX_OUTPUT_TOKENS` | `engine.maxOutputTokens` |
+| `ADZE_SANDBOX_MODE` (`ADZE_SANDBOX` also read) | `sandbox.mode` |
+| `ADZE_SANDBOX_BROKER` | `sandbox.broker` |
+| `ADZE_WRITABLE_ROOTS` | `sandbox.writableRoots` (`path.delimiter`-separated) |
+| `ADZE_ALLOWED_HOSTS` | `sandbox.allowedNetworkHosts` (comma-separated) |
+| `ADZE_APPROVAL_POLICY` (`ADZE_APPROVAL` also read) | `approvals.policy` |
+| `ADZE_ALLOW`, `ADZE_FORBID`, `ADZE_PROMPT` | `commandRules` (comma-separated; a prefix containing a comma belongs in the file) |
+| `ADZE_ALLOW_UNSANDBOXED_JS`, `ADZE_ALLOW_NATIVE` | `plugins.*` (`1`/`true`/`yes` or `0`/`false`/`no`) |
+| `ADZE_ON_HOOK_FAILURE` | `plugins.onHookFailure` |
+| `ADZE_DEFAULT_PACK` | `workflows.defaultPack` |
+| `ADZE_OPENVSX_URL` | `gallery.openVsxUrl` |
+
+### `adze doctor` on config
+
+`adze doctor` prints a `Config` section: every value with its source
+(`flag`/`env`/`workspace`/`user`/`default`), the files read, and every
+warning. The `Sandbox` section is built from the same resolved values `run`
+and `chat` use, so the boundary it reports is the boundary in force rather
+than a second opinion. `--json` carries the same as data under `config`.
 
 ## Recipes
 

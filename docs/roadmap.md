@@ -223,7 +223,7 @@ returned a server-computed result.
 | `@adze/mcp` client | ✅ Landed | stdio + Streamable HTTP; MCP servers as tools, each declaring effects the gate authorizes |
 | `@adze/mcp` server | ✅ Landed | **Adze addressable by other agents.** Cheap, and makes Adze useful to people who will not switch tools. |
 | Plugin surfaces 1–3 | ✅ Landed | Tools, context providers, slash commands — in `@adze/plugin-sdk`, ahead of schedule |
-| Config system | ⬜ Not started | `.adze/config.jsonc`, `AGENTS.md` conventions. Only the provider slice exists, in strict JSON. |
+| Config system | ✅ Landed | `.adze/config.jsonc` (JSONC), `AGENTS.md` conventions, layering flags > env > workspace > user > defaults, `doctor` source reporting. Provider slice stays in strict-JSON `.adze/providers.json`. |
 | Ghost text | ✅ Landed, off by default | `InlineCompletionItemProvider`; `adze.inlineCompletion.enabled` defaults to false |
 
 **Done when:** published to both galleries, and an MCP server from the existing
