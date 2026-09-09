@@ -1,0 +1,52 @@
+{
+  "cases": [
+    {
+      "id": "pg-c-exact-include",
+      "description": "C exact edit: add a guard before a return.",
+      "path": "src/main.c",
+      "original": ["int get(void) {", "  return fd;", "}", ""],
+      "edits": [{ "search": "  return fd;", "replace": "  if (fd < 0) return -1;\n  return fd;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["int get(void) {", "  if (fd < 0) return -1;", "  return fd;", "}", ""],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "c", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-c-block-comment-applies",
+      "description": "C brace inside a block comment is not structure; a nearby edit applies.",
+      "path": "src/note.c",
+      "original": ["/* open { brace */", "int x = 1;", ""],
+      "edits": [{ "search": "int x = 1;", "replace": "int x = 2;" }],
+      "expect": { "kind": "output", "content": ["/* open { brace */", "int x = 2;", ""] },
+      "tags": ["polyglot", "c", "edit-format", "comments"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-json-balanced-applies",
+      "description": "JSON balanced edit applies; the structural checker stays conservative.",
+      "path": "config/settings.json",
+      "original": ["{", "  \"port\": 3000", "}", ""],
+      "edits": [{ "search": "  \"port\": 3000", "replace": "  \"port\": 8080" }],
+      "expect": { "kind": "output", "content": ["{", "  \"port\": 8080", "}", ""] },
+      "tags": ["polyglot", "json", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-md-exact-heading",
+      "description": "Markdown has no validator; an exact edit applies and reports none.",
+      "path": "docs/notes.md",
+      "original": ["# Notes", "", "Todo.", ""],
+      "edits": [{ "search": "Todo.", "replace": "Done." }],
+      "expect": {
+        "kind": "output",
+        "content": ["# Notes", "", "Done.", ""],
+        "validator": "none"
+      },
+      "tags": ["polyglot", "markdown", "edit-format", "exact", "honesty"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

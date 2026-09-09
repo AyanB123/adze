@@ -1,0 +1,144 @@
+{
+  "cases": [
+    {
+      "id": "pg-ts-exact-const",
+      "description": "TypeScript exact single-line edit: widen a constant declaration.",
+      "path": "src/config.ts",
+      "original": ["export const TIMEOUT_MS = 3000;", "export const RETRIES = 3;", ""],
+      "edits": [
+        {
+          "search": "export const TIMEOUT_MS = 3000;",
+          "replace": "export const TIMEOUT_MS = env.TIMEOUT ?? 3000;"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["export const TIMEOUT_MS = env.TIMEOUT ?? 3000;", "export const RETRIES = 3;", ""],
+        "strategy": "exact",
+        "tier": "search-replace"
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-guard-clause",
+      "description": "TypeScript multi-line edit: insert a guard clause before a lookup.",
+      "path": "src/handler.ts",
+      "original": [
+        "export function handle(req: Request) {",
+        "  const id = req.params.id;",
+        "  return lookup(id);",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "  const id = req.params.id;\n  return lookup(id);",
+          "replace": "  const id = req.params.id;\n  if (!id) throw new Error('missing id');\n  return lookup(id);"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": [
+          "export function handle(req: Request) {",
+          "  const id = req.params.id;",
+          "  if (!id) throw new Error('missing id');",
+          "  return lookup(id);",
+          "}",
+          ""
+        ],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-whitespace-drift",
+      "description": "TypeScript trailing-whitespace drift handled by whitespace-normalized matching.",
+      "path": "src/drift.ts",
+      "original": ["function f() {", "  return 1;   ", "}", ""],
+      "edits": [{ "search": "  return 1;\n}", "replace": "  return 2;\n}" }],
+      "expect": {
+        "kind": "output",
+        "content": ["function f() {", "  return 2;", "}", ""],
+        "strategy": "whitespace-normalized"
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "whitespace"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-reindent-class",
+      "description": "TypeScript method quoted from the wrong level; re-indented to the file level.",
+      "path": "src/klass.ts",
+      "original": ["class A {", "  run() {", "    return 1;", "  }", "}", ""],
+      "edits": [{ "search": "run() {\n  return 1;\n}", "replace": "run() {\n  return 2;\n}" }],
+      "expect": {
+        "kind": "output",
+        "content": ["class A {", "  run() {", "    return 2;", "  }", "}", ""],
+        "strategy": "indentation-tolerant"
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "indentation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-anchored-elision",
+      "description": "TypeScript anchored edit with an explicit elision marker splicing the interior.",
+      "path": "src/long.ts",
+      "original": [
+        "function outer() {",
+        "  const a = 1;",
+        "  const b = 2;",
+        "  const c = 3;",
+        "  return a + b + c;",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "function outer() {\n  // ...\n  return a + b + c;\n}",
+          "replace": "function outer() {\n  return 6;\n}"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["function outer() {", "  return 6;", "}", ""],
+        "strategy": "anchored"
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "anchored"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-ambiguous-let",
+      "description": "TypeScript repeated statement refused as ambiguous rather than guessed.",
+      "path": "src/dup.ts",
+      "original": ["let x = 1;", "let x = 1;", ""],
+      "edits": [{ "search": "let x = 1;", "replace": "const x = 1;" }],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["polyglot", "typescript", "edit-format", "refusal", "ambiguity"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-brace-truncation-refused",
+      "description": "TypeScript edit deleting a closing brace refused as parse-broken.",
+      "path": "src/broken.ts",
+      "original": ["function f() {", "  return 1;", "}", ""],
+      "edits": [{ "search": "  return 1;\n}", "replace": "  return 1;" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "typescript", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-ts-template-nesting-applies",
+      "description": "TypeScript nested template interpolation must not confuse the structural checker.",
+      "path": "src/tmpl.ts",
+      "original": ["const q = `outer ${`inner ${x}`} end`;", "const y = 1;", ""],
+      "edits": [{ "search": "const y = 1;", "replace": "const y = 2;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const q = `outer ${`inner ${x}`} end`;", "const y = 2;", ""]
+      },
+      "tags": ["polyglot", "typescript", "edit-format", "strings"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

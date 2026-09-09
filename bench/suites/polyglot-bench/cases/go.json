@@ -1,0 +1,62 @@
+{
+  "cases": [
+    {
+      "id": "pg-go-exact-handler",
+      "description": "Go exact edit: add an error return to a handler.",
+      "path": "pkg/server/server.go",
+      "original": ["func handle() int {", "\treturn 1", "}", ""],
+      "edits": [{ "search": "\treturn 1", "replace": "\tif err != nil {\n\t\treturn -1\n\t}\n\treturn 1" }],
+      "expect": {
+        "kind": "output",
+        "content": ["func handle() int {", "\tif err != nil {", "\t\treturn -1", "\t}", "\treturn 1", "}", ""],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "go", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-go-unclosed-brace-refused",
+      "description": "Go edit dropping a closing brace refused through the async validation path.",
+      "path": "pkg/store/store.go",
+      "original": ["func get() int {", "\treturn 1", "}", ""],
+      "edits": [{ "search": "\treturn 1\n}", "replace": "\treturn 1" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "go", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-go-ambiguous-assign",
+      "description": "Go repeated assignment refused as ambiguous.",
+      "path": "pkg/dup/dup.go",
+      "original": ["x := 1", "y := 2", "x := 1", ""],
+      "edits": [{ "search": "x := 1", "replace": "x := 9" }],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["polyglot", "go", "edit-format", "refusal", "ambiguity"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-go-whitespace-normalized",
+      "description": "Go internal whitespace runs differ; whitespace-normalized matching handles it.",
+      "path": "pkg/conf/conf.go",
+      "original": ["const   limit   =   10", ""],
+      "edits": [{ "search": "const limit = 10", "replace": "const limit = 20" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const limit = 20", ""],
+        "strategy": "whitespace-normalized"
+      },
+      "tags": ["polyglot", "go", "edit-format", "whitespace"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-go-noop-refused",
+      "description": "Go identical search and replace reported as no-op.",
+      "path": "pkg/noop/noop.go",
+      "original": ["x := 1", ""],
+      "edits": [{ "search": "x := 1", "replace": "x := 1" }],
+      "expect": { "kind": "refusal", "reason": "no-op" },
+      "tags": ["polyglot", "go", "edit-format", "refusal", "no-op"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

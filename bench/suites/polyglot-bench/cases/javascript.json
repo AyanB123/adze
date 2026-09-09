@@ -1,0 +1,77 @@
+{
+  "cases": [
+    {
+      "id": "pg-js-exact-require",
+      "description": "JavaScript exact edit: replace a require with an import guard.",
+      "path": "src/server.js",
+      "original": ["const port = 3000;", "start(port);", ""],
+      "edits": [{ "search": "const port = 3000;", "replace": "const port = process.env.PORT ?? 3000;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const port = process.env.PORT ?? 3000;", "start(port);", ""],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "javascript", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-js-sequential-edits",
+      "description": "JavaScript sequential edits see earlier results, matching model reasoning order.",
+      "path": "src/pair.js",
+      "original": ["let a = 1;", "let b = 2;", ""],
+      "edits": [
+        { "search": "let a = 1;", "replace": "const a = 10;" },
+        { "search": "let b = 2;", "replace": "const b = 20;" }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["const a = 10;", "const b = 20;", ""]
+      },
+      "tags": ["polyglot", "javascript", "edit-format", "sequencing"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-js-empty-replace-deletes",
+      "description": "JavaScript empty replacement deletes the matched region and still validates.",
+      "path": "src/flag.js",
+      "original": ["const debug = true;", "run();", ""],
+      "edits": [{ "search": "const debug = true;\n", "replace": "" }],
+      "expect": { "kind": "output", "content": ["run();", ""] },
+      "tags": ["polyglot", "javascript", "edit-format", "deletion"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-js-unterminated-string-refused",
+      "description": "JavaScript edit leaving an unterminated string refused as parse-broken.",
+      "path": "src/str.js",
+      "original": ["const name = \"ada\";", "greet(name);", ""],
+      "edits": [{ "search": "const name = \"ada\";", "replace": "const name = \"ada;" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "javascript", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-js-brace-in-string-applies",
+      "description": "JavaScript unbalanced brace inside a string is text, not structure.",
+      "path": "src/msg.js",
+      "original": ["const msg = \"open { brace\";", "send(msg);", ""],
+      "edits": [{ "search": "send(msg);", "replace": "send(msg, 1);" }],
+      "expect": {
+        "kind": "output",
+        "content": ["const msg = \"open { brace\";", "send(msg, 1);", ""]
+      },
+      "tags": ["polyglot", "javascript", "edit-format", "strings"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-js-not-found-transposed",
+      "description": "JavaScript transposed arguments are a different call, refused as not-found.",
+      "path": "src/geo.js",
+      "original": ["move(x, y);", ""],
+      "edits": [{ "search": "move(y, x);", "replace": "translate(y, x);" }],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["polyglot", "javascript", "edit-format", "refusal", "fuzzy-guard"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

@@ -1,0 +1,129 @@
+{
+  "cases": [
+    {
+      "id": "pg-py-exact-guard",
+      "description": "Python exact single-line edit: add a guard clause to a function.",
+      "path": "app/service.py",
+      "original": ["def get_user(db, user_id):", "    return db.fetch(user_id)", ""],
+      "edits": [
+        {
+          "search": "    return db.fetch(user_id)",
+          "replace": "    if user_id is None:\n        return None\n    return db.fetch(user_id)"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": [
+          "def get_user(db, user_id):",
+          "    if user_id is None:",
+          "        return None",
+          "    return db.fetch(user_id)",
+          ""
+        ],
+        "strategy": "exact",
+        "tier": "search-replace"
+      },
+      "tags": ["polyglot", "python", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-whitespace-drift",
+      "description": "Python edit where the file has trailing whitespace the model did not reproduce.",
+      "path": "app/cache.py",
+      "original": ["def ttl():", "    return 300   ", "    notify()", ""],
+      "edits": [
+        {
+          "search": "    return 300\n    notify()",
+          "replace": "    return 600\n    notify()"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["def ttl():", "    return 600", "    notify()", ""],
+        "strategy": "whitespace-normalized"
+      },
+      "tags": ["polyglot", "python", "edit-format", "whitespace"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-reindent-method",
+      "description": "Python method quoted from the wrong nesting level; replacement must re-indent to the file level.",
+      "path": "app/worker.py",
+      "original": ["class Worker:", "    def run(self):", "        return 1", ""],
+      "edits": [
+        { "search": "def run(self):\n    return 1", "replace": "def run(self):\n    return 2" }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["class Worker:", "    def run(self):", "        return 2", ""],
+        "strategy": "indentation-tolerant"
+      },
+      "tags": ["polyglot", "python", "edit-format", "indentation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-dropped-body-refused",
+      "description": "Python edit that drops an indented body; refused as parse-broken.",
+      "path": "app/handler.py",
+      "original": ["def handle(event):", "    return process(event)", ""],
+      "edits": [{ "search": "    return process(event)", "replace": "return process(event)" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "python", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-ambiguous-import",
+      "description": "Python repeated import line; ambiguous without an occurrence selector.",
+      "path": "app/urls.py",
+      "original": ["import os", "import sys", "import os", ""],
+      "edits": [{ "search": "import os", "replace": "import pathlib" }],
+      "expect": { "kind": "refusal", "reason": "ambiguous" },
+      "tags": ["polyglot", "python", "edit-format", "refusal", "ambiguity"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-occurrence-resolves",
+      "description": "Same repeated import, disambiguated by occurrence selector.",
+      "path": "app/urls.py",
+      "original": ["import os", "import sys", "import os", ""],
+      "edits": [{ "search": "import os", "replace": "import pathlib", "occurrence": 2 }],
+      "expect": {
+        "kind": "output",
+        "content": ["import os", "import sys", "import pathlib", ""]
+      },
+      "tags": ["polyglot", "python", "edit-format", "occurrence"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-triple-quoted-applies",
+      "description": "Python triple-quoted string containing braces; must not read as structure.",
+      "path": "app/tmpl.py",
+      "original": [
+        "DOC = \"\"\"",
+        "result: {value}",
+        "\"\"\"",
+        "x = 1",
+        ""
+      ],
+      "edits": [{ "search": "x = 1", "replace": "x = 2" }],
+      "expect": { "kind": "output", "content": ["DOC = \"\"\"", "result: {value}", "\"\"\"", "x = 2", ""] },
+      "tags": ["polyglot", "python", "edit-format", "strings"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-py-not-found-guard",
+      "description": "Python near-miss identifier must be not-found, never fuzzy-matched.",
+      "path": "app/auth.py",
+      "original": ["def authenticate(user):", "    return check(user)", ""],
+      "edits": [
+        {
+          "search": "def authentcate(user):",
+          "replace": "def authenticate(user):\n    return None"
+        }
+      ],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["polyglot", "python", "edit-format", "refusal", "fuzzy-guard"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

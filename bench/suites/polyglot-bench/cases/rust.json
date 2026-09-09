@@ -1,0 +1,64 @@
+{
+  "cases": [
+    {
+      "id": "pg-rs-exact-fn",
+      "description": "Rust exact edit: change a return value in a function with generics.",
+      "path": "src/lib.rs",
+      "original": ["fn answer<T>(v: T) -> i32 {", "    1", "}", ""],
+      "edits": [{ "search": "    1", "replace": "    2" }],
+      "expect": {
+        "kind": "output",
+        "content": ["fn answer<T>(v: T) -> i32 {", "    2", "}", ""],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "rust", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-rs-mismatched-bracket-refused",
+      "description": "Rust brace closed by a bracket refused as parse-broken.",
+      "path": "src/shape.rs",
+      "original": ["fn f() {", "    let v = vec![1];", "}", ""],
+      "edits": [{ "search": "    let v = vec![1];\n}", "replace": "    let v = vec![1];\n]" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "rust", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-rs-anchored-elision",
+      "description": "Rust anchored edit with an elision comment splicing the interior.",
+      "path": "src/long.rs",
+      "original": [
+        "fn outer() -> i32 {",
+        "    let a = 1;",
+        "    let b = 2;",
+        "    a + b",
+        "}",
+        ""
+      ],
+      "edits": [
+        {
+          "search": "fn outer() -> i32 {\n    // ...\n    a + b\n}",
+          "replace": "fn outer() -> i32 {\n    3\n}"
+        }
+      ],
+      "expect": {
+        "kind": "output",
+        "content": ["fn outer() -> i32 {", "    3", "}", ""],
+        "strategy": "anchored"
+      },
+      "tags": ["polyglot", "rust", "edit-format", "anchored"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-rs-not-found-literal",
+      "description": "Rust off-by-one numeric literal refused as not-found, never fuzzy-matched.",
+      "path": "src/limit.rs",
+      "original": ["const TIMEOUT_MS: u64 = 30000;", ""],
+      "edits": [{ "search": "const TIMEOUT_MS: u64 = 3000;", "replace": "const TIMEOUT_MS: u64 = 60000;" }],
+      "expect": { "kind": "refusal", "reason": "not-found" },
+      "tags": ["polyglot", "rust", "edit-format", "refusal", "fuzzy-guard"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}

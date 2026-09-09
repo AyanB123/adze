@@ -1,0 +1,67 @@
+{
+  "cases": [
+    {
+      "id": "pg-java-exact-method",
+      "description": "Java exact edit: add a null guard to a method.",
+      "path": "src/main/java/app/Service.java",
+      "original": ["class Service {", "  String name() {", "    return id;", "  }", "}", ""],
+      "edits": [{ "search": "    return id;", "replace": "    if (id == null) return \"\";\n    return id;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["class Service {", "  String name() {", "    if (id == null) return \"\";", "    return id;", "  }", "}", ""],
+        "strategy": "exact"
+      },
+      "tags": ["polyglot", "java", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-java-brace-in-string-applies",
+      "description": "Java unbalanced brace inside a string literal is text, not structure.",
+      "path": "src/main/java/app/Msg.java",
+      "original": ["class Msg {", "  String m = \"open { brace\";", "}", ""],
+      "edits": [{ "search": "  String m = \"open { brace\";", "replace": "  String m = \"closed\";" }],
+      "expect": {
+        "kind": "output",
+        "content": ["class Msg {", "  String m = \"closed\";", "}", ""]
+      },
+      "tags": ["polyglot", "java", "edit-format", "strings"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-java-unmatched-close-refused",
+      "description": "Java extra closing brace refused as parse-broken.",
+      "path": "src/main/java/app/Broken.java",
+      "original": ["class B {", "  void f() {}", "}", ""],
+      "edits": [{ "search": "  void f() {}", "replace": "  void f() {} }" }],
+      "expect": { "kind": "refusal", "reason": "parse-broken" },
+      "tags": ["polyglot", "java", "edit-format", "refusal", "validation"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-sh-exact-echo",
+      "description": "Shell exact edit: change a variable default.",
+      "path": "scripts/deploy.sh",
+      "original": ["#!/bin/sh", "PORT=3000", "serve \"$PORT\"", ""],
+      "edits": [{ "search": "PORT=3000", "replace": "PORT=${PORT:-3000}" }],
+      "expect": {
+        "kind": "output",
+        "content": ["#!/bin/sh", "PORT=${PORT:-3000}", "serve \"$PORT\"", ""]
+      },
+      "tags": ["polyglot", "shell", "edit-format", "exact"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    },
+    {
+      "id": "pg-sh-case-esac-applies",
+      "description": "Shell case/esac blocks are not brackets; an edit inside one applies.",
+      "path": "scripts/run.sh",
+      "original": ["case \"$1\" in", "  start) serve;;", "esac", ""],
+      "edits": [{ "search": "  start) serve;;", "replace": "  start) serve --fast;;" }],
+      "expect": {
+        "kind": "output",
+        "content": ["case \"$1\" in", "  start) serve --fast;;", "esac", ""]
+      },
+      "tags": ["polyglot", "shell", "edit-format", "shell-blocks"],
+      "source": "Aider Polyglot subset sampling (40/225), synthetic"
+    }
+  ]
+}
