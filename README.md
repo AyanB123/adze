@@ -27,8 +27,12 @@ branded IDE — all Apache-2.0, all running the same engine, all local-first by 
 >
 > **What works today:** the protocol, the engine (permission gate, tool registry,
 > epoch-based context assembler, turn machine), the three-tier applier, the
-> provider gateway, local retrieval, and the CLI — `run`, `chat`, `apply`,
-> `validate`, `doctor`, `models`. 904 tests pass across those six packages.
+> provider gateway, local retrieval, the plugin SDK, MCP client and server, the
+> public SDK, and the CLI — `run`, `chat`, `apply`,
+> `validate`, `doctor`, `models` — plus the VS Code extension, landed but
+> unpublished. 2,003 tests pass across the landed packages. [The
+> roadmap](docs/roadmap.md) is the authoritative per-package status; where this
+> file disagrees with it, the roadmap wins.
 >
 > **Three things a reader would reasonably assume and should not.** OS-level
 > sandbox containment holds only where the CLI can wire a kernel mechanism:
@@ -36,11 +40,12 @@ branded IDE — all Apache-2.0, all running the same engine, all local-first by 
 > while Windows is `gate-only` — there the permission gate is the only
 > enforcement that exists. `adze doctor` reports which boundary the current
 > machine gets.
-> **No benchmark result has been published.** And **no one has yet verified a
-> live end-to-end `adze run` against a real model with a valid API key** — the
-> code path is exercised and its error handling is tested, but the successful case
-> is unwitnessed. The VS Code extension and MCP support are being written now and
-> are not usable yet. [The roadmap](docs/roadmap.md) tracks all of it.
+> **No benchmark result has been published.** The live end-to-end `adze run`
+> against a real model has been demonstrated once — one task, one model, one
+> platform — which closed M1's exit criterion without measuring how often it
+> works. The MCP client and server and the VS Code extension have landed; the
+> extension is unpublished, so no user can install it yet.
+> [The roadmap](docs/roadmap.md) tracks all of it.
 
 ## Why this exists
 
@@ -137,10 +142,15 @@ surfaces: **tools** (via MCP, so thousands of existing servers work on day one),
 **subagents**, and **UI**. Hooks can veto a tool call or an edit, which is what
 lets a team encode policy without waiting for us to build a policy feature.
 
-**None of this is built yet.** `@adze/plugin-sdk` is empty and the six surfaces
-exist as a [written specification](docs/plugins/spec.md) only. The spec comes
+**Surfaces 1–5 are built; the WASM host is not.** `@adze/plugin-sdk` carries the
+manifest schema, authoring types, and the tools, context-provider, slash-command,
+hook, and subagent surfaces, exercised by eight first-party plugins (see
+`plugins/FINDINGS.md` for what building them taught us). Two gaps remain: the
+WASM host is a seam rather than a runtime — procedural plugin code executes as
+local ES modules today — and `adze plugin dev` does not exist. The six surfaces
+are specified in the [written specification](docs/plugins/spec.md), which comes
 first on purpose — the extension points are not validated until real plugins hit
-a wall — but nothing here is usable today.
+a wall.
 
 ### 5. Sandboxing that includes Windows
 
@@ -195,11 +205,12 @@ Being explicit about limits early is cheaper than being discovered later.
               └──────────────────────────────────────────────┘
 ```
 
-Only the CLI exists as a surface today; the extension is in progress and the IDE
-and daemon are later milestones. Inside the engine box, the session store, agent
-loop, tool registry, permission gate, context assembler, model gateway, and edit
-applier are implemented — the sandbox, plugin host, and MCP client/server are
-not. The TUI is deliberately deferred so the CLI stays scriptable.
+Two surfaces exist today: the CLI, and the VS Code extension (landed,
+unpublished). The IDE and daemon are later milestones. Inside the engine box,
+the session store, agent loop, tool registry, permission gate, context
+assembler, model gateway, edit applier, sandbox wiring, plugin surfaces 1–5,
+and MCP client/server are implemented — the WASM host is not. The TUI is
+deliberately deferred so the CLI stays scriptable.
 
 The engine never renders anything. Every surface owns its own UI and speaks the
 same protocol, which is why the CLI, the extension, and the IDE cannot drift.
@@ -209,7 +220,9 @@ decision went the way it did.
 
 ## Repository layout
 
-Status column reflects committed code, not intent.
+Status column reflects committed code, not intent. The roadmap's state table is
+authoritative; this table summarizes it, and where the two disagree the roadmap
+wins.
 
 | Path | What it is | Status |
 | --- | --- | --- |
@@ -219,11 +232,11 @@ Status column reflects committed code, not intent.
 | `packages/apply` | Three-tier edit applier with parse validation. | ✅ Landed |
 | `packages/retrieval` | Hybrid local retrieval: ripgrep, tree-sitter, RRF fusion. Vectors deferred. | ✅ Landed |
 | `packages/cli` | The `adze` command. Plain text; no TUI yet. | ✅ Landed |
-| `packages/mcp` | MCP client and server. Adze is addressable as an MCP server. | 🚧 In progress |
-| `apps/vscode` | VS Code / Cursor / Windsurf extension. | 🚧 In progress |
+| `packages/mcp` | MCP client and server. Adze is addressable as an MCP server. | ✅ Landed |
+| `apps/vscode` | VS Code / Cursor / Windsurf extension. | ✅ Landed, unpublished |
 | `packages/sandbox` | Per-OS sandbox brokers. Seatbelt, bubblewrap, and opt-in Docker confine; Windows is gate-only. | ✅ Landed, Windows excepted |
-| `packages/plugin-sdk` | Plugin manifest schema, host, and authoring API. | ⬜ Empty |
-| `packages/sdk` | Public embeddable SDK for building your own surface. | ⬜ Empty |
+| `packages/plugin-sdk` | Plugin manifest schema, host, and authoring API. | ✅ Landed, WASM host excepted |
+| `packages/sdk` | Public embeddable SDK for building your own surface. | ✅ Landed |
 | `apps/ide` | Code-OSS patch series and build pipeline. Not a vendored fork. | ⬜ Empty |
 | `apps/hub` | Plugin registry index and web UI. | ⬜ Empty |
 | `bench` | Evaluation harness, our own benchmark suites, and published reports. | ✅ `apply-bench` only |
@@ -231,9 +244,10 @@ Status column reflects committed code, not intent.
 
 ## Getting started
 
-> Pre-alpha. The engine and CLI are committed and their test suites pass, but no
-> one has yet verified a full `adze run` against a real model with a valid key.
-> Expect to be the first. Follow [the roadmap](docs/roadmap.md) for what is
+> Pre-alpha. The engine and CLI are committed and their test suites pass, and a
+> full `adze run` against a real model has been demonstrated once — one task,
+> one model, one platform. Expect rough edges. Follow [the
+> roadmap](docs/roadmap.md) for what is
 > actually usable this week.
 
 ```bash
