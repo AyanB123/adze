@@ -332,6 +332,15 @@ Published as standalone, independently runnable benchmarks with permissive
 licenses — useful to competitors too. Owning the evaluation for a layer is a
 stronger long-term position than a leaderboard placement.
 
+**`nep-bench` status: Tier-1 prototype, not a result.** `pnpm bench:nep` runs 30
+hunks mined from Adze's own history through the deterministic applier loop — the
+true hunk supplied, reconstruction checked byte-identically. That measures the
+applier given the answer, not prediction and not any model: there is no
+withheld-hunk adapter, no pinned model, no ≥3-attempt sampling, and no container
+test-pass column, so the suite has no publishable number and its report says so
+first. See `bench/suites/nep-bench/README.md` for the input distribution and for
+what the model loop needs.
+
 ---
 
 ## M7 — Plugin registry
