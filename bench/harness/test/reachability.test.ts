@@ -124,7 +124,19 @@ const IN_SCOPE: readonly (readonly string[])[] = [
   ['bench', 'harness'],
 ];
 
-describe('D12 — the dependency rules are tested, not only reviewed', () => {
+/**
+ * Recursive source scans over a dozen package trees do not fit Vitest's five-second
+ * default on a loaded Windows host, failing as timeouts with a victim that changes
+ * from run to run. Raising the budget weakens no assertion: a wiring violation still
+ * fails, and the alternative is a suite that goes red on a busy runner for reasons
+ * that have nothing to do with reachability. Same remedy as the git-backed block in
+ * `leakage.test.ts` (plan P1.4).
+ */
+const REACHABILITY_TIMEOUT_MS = 30_000;
+
+describe('D12 — the dependency rules are tested, not only reviewed', {
+  timeout: REACHABILITY_TIMEOUT_MS,
+}, () => {
   it('protocol depends on nothing but zod', async () => {
     const pkg = await manifest('packages', 'protocol');
     expect(Object.keys(pkg.dependencies ?? {})).toEqual(['zod']);
