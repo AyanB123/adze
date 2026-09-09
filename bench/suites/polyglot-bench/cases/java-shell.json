@@ -5,10 +5,23 @@
       "description": "Java exact edit: add a null guard to a method.",
       "path": "src/main/java/app/Service.java",
       "original": ["class Service {", "  String name() {", "    return id;", "  }", "}", ""],
-      "edits": [{ "search": "    return id;", "replace": "    if (id == null) return \"\";\n    return id;" }],
+      "edits": [
+        {
+          "search": "    return id;",
+          "replace": "    if (id == null) return \"\";\n    return id;"
+        }
+      ],
       "expect": {
         "kind": "output",
-        "content": ["class Service {", "  String name() {", "    if (id == null) return \"\";", "    return id;", "  }", "}", ""],
+        "content": [
+          "class Service {",
+          "  String name() {",
+          "    if (id == null) return \"\";",
+          "    return id;",
+          "  }",
+          "}",
+          ""
+        ],
         "strategy": "exact"
       },
       "tags": ["polyglot", "java", "edit-format", "exact"],
@@ -19,7 +32,9 @@
       "description": "Java unbalanced brace inside a string literal is text, not structure.",
       "path": "src/main/java/app/Msg.java",
       "original": ["class Msg {", "  String m = \"open { brace\";", "}", ""],
-      "edits": [{ "search": "  String m = \"open { brace\";", "replace": "  String m = \"closed\";" }],
+      "edits": [
+        { "search": "  String m = \"open { brace\";", "replace": "  String m = \"closed\";" }
+      ],
       "expect": {
         "kind": "output",
         "content": ["class Msg {", "  String m = \"closed\";", "}", ""]

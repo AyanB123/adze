@@ -77,7 +77,17 @@ function limitations(report: BenchReport): string[] {
     );
   }
 
-  if (report.inputSource === 'synthetic') {
+  if (report.suite === 'polyglot-bench') {
+    lines.push(
+      '**These numbers measure edit format, not model behavior.** Every case in this',
+      'suite is hand-written: a 40-case subset sampling the shape of the 225-task Aider',
+      'Polyglot set, run with no model, no network, and no container (`inputSource:',
+      'synthetic`). Nothing here is evidence about how any model formats an edit, and',
+      'the per-tier and per-strategy tables below must not be described as "per model"',
+      '— there is only one synthetic source of inputs.',
+      '',
+    );
+  } else if (report.inputSource === 'synthetic') {
     lines.push(
       '**These numbers measure the applier, not any model.** Every case in this suite',
       'is hand-written. Nothing here is evidence about how any model formats an edit,',
@@ -140,6 +150,20 @@ export function renderReportMarkdown(report: BenchReport): string {
     '| --- | --- | --- | --- | --- |',
     `| ${report.totals.cases} | ${report.totals.passed} | ${report.totals.failed} | ${report.totals.harnessErrors} | ${formatRate(report.totals.passRate)} |`,
     '',
+    ...(report.suite === 'polyglot-bench'
+      ? [
+          `**% well formed: ${formatRate(
+            report.totals.cases === 0
+              ? null
+              : (report.totals.cases - report.totals.harnessErrors) / report.totals.cases,
+          )}** (${report.totals.cases - report.totals.harnessErrors}/${report.totals.cases} cases parsed as valid edit blocks).`,
+          '',
+          'Well formed and pass rate are reported separately: a malformed edit block is a',
+          'harness error, never a pass, so a format regression cannot average away into the',
+          'pass rate.',
+          '',
+        ]
+      : []),
   ]);
 
   // Before the ordinary breakdowns: a case that applied when it should have been
@@ -248,6 +272,11 @@ export function renderReportMarkdown(report: BenchReport): string {
 export function renderConsoleSummary(report: BenchReport): string {
   const t = report.totals;
   const lines = [`${report.suite}: ${t.passed}/${t.cases} passed (${formatRate(t.passRate)})`];
+  if (report.suite === 'polyglot-bench') {
+    const wellFormed = t.cases - t.harnessErrors;
+    const rate = t.cases === 0 ? null : wellFormed / t.cases;
+    lines.push(`  well formed: ${wellFormed}/${t.cases} (${formatRate(rate)})`);
+  }
   if (report.severeFailures.length > 0) {
     lines.push(`  ${report.severeFailures.length} SEVERE: applied an edit that required a refusal`);
   }

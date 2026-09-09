@@ -98,15 +98,12 @@
       "id": "pg-py-triple-quoted-applies",
       "description": "Python triple-quoted string containing braces; must not read as structure.",
       "path": "app/tmpl.py",
-      "original": [
-        "DOC = \"\"\"",
-        "result: {value}",
-        "\"\"\"",
-        "x = 1",
-        ""
-      ],
+      "original": ["DOC = \"\"\"", "result: {value}", "\"\"\"", "x = 1", ""],
       "edits": [{ "search": "x = 1", "replace": "x = 2" }],
-      "expect": { "kind": "output", "content": ["DOC = \"\"\"", "result: {value}", "\"\"\"", "x = 2", ""] },
+      "expect": {
+        "kind": "output",
+        "content": ["DOC = \"\"\"", "result: {value}", "\"\"\"", "x = 2", ""]
+      },
       "tags": ["polyglot", "python", "edit-format", "strings"],
       "source": "Aider Polyglot subset sampling (40/225), synthetic"
     },

@@ -46,6 +46,15 @@ export {
   redactTaskRecord,
   SOLUTION_BEARING_FIELDS,
 } from './leakage.js';
+export type { FencedParse, WellFormedSummary } from './polyglot.js';
+export {
+  isWellFormedCase,
+  POLYGLOT_SUBSET_SIZE,
+  POLYGLOT_UPSTREAM_TOTAL,
+  parseFencedEdits,
+  renderFencedEdits,
+  wellFormedSummary,
+} from './polyglot.js';
 export type {
   Baseline,
   Citation,

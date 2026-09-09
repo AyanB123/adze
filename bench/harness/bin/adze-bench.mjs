@@ -2,7 +2,8 @@
 /**
  * `adze-bench` — the benchmark entry point.
  *
- * Wired to the root scripts `bench:apply` and `bench:list`.
+ * Wired to the root scripts `bench:apply`, `bench:polyglot`, `bench:index`,
+ * `bench:swe-smoke`, and `bench:list`.
  *
  * Argument parsing is hand-rolled rather than using commander, so that `bench/`
  * carries no dependency the product does not already have. Two subcommands and four
@@ -37,11 +38,12 @@ const harness = await import(pathToFileURL(entry).href);
 const USAGE = `adze-bench — Adze benchmark runner
 
 Usage:
-  adze-bench apply [options]     run the apply-bench suite
+  adze-bench apply [options]     run a Tier-1 suite (default: apply-bench)
   adze-bench list  [options]     list cases without running them
 
 Options:
-  --suite <name>   suite under bench/suites (default: apply-bench)
+  --suite <name>   suite under bench/suites (default: apply-bench;
+                   polyglot-bench, index-bench, swe-smoke also run here)
   --filter <text>  only cases whose id, tag, or description contains <text>
   --out <dir>      write the run here (default: bench/.runs/<stamp>-<suite>)
   --no-write       run and print, write nothing
@@ -206,10 +208,20 @@ if (args.json) {
   }
   // Said on every run, not only in the report, because a number quoted from a
   // terminal is the one most likely to end up somewhere without its caveats.
-  process.stdout.write(
-    '\nThis suite measures the applier against hand-written edits. It is not a\n' +
-      'measurement of any model, and its number is not a per-model result.\n',
-  );
+  // Polyglot states edit format rather than the applier, because that is what its
+  // limitations section states and the terminal line must agree with the report.
+  if (outcome.report.suite === 'polyglot-bench') {
+    process.stdout.write(
+      '\nThis suite measures edit format against hand-written edits sampled from the\n' +
+        'Aider Polyglot shape (40 of 225). It is not a measurement of any model,\n' +
+        'and its number is not a per-model result.\n',
+    );
+  } else {
+    process.stdout.write(
+      '\nThis suite measures the applier against hand-written edits. It is not a\n' +
+        'measurement of any model, and its number is not a per-model result.\n',
+    );
+  }
 }
 
 if (!policy.ok) {

@@ -5,7 +5,9 @@
       "description": "JavaScript exact edit: replace a require with an import guard.",
       "path": "src/server.js",
       "original": ["const port = 3000;", "start(port);", ""],
-      "edits": [{ "search": "const port = 3000;", "replace": "const port = process.env.PORT ?? 3000;" }],
+      "edits": [
+        { "search": "const port = 3000;", "replace": "const port = process.env.PORT ?? 3000;" }
+      ],
       "expect": {
         "kind": "output",
         "content": ["const port = process.env.PORT ?? 3000;", "start(port);", ""],
