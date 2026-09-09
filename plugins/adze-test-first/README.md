@@ -84,9 +84,9 @@ reviewable by people who do not program.
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-test-first
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-test-first` does not exist. Load it programmatically through
+`@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 No flags: nothing here is procedural.
 

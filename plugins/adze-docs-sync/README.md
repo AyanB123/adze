@@ -55,9 +55,9 @@ A manifest, one command, one subagent. Nothing to compile and nothing to sandbox
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-docs-sync
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-docs-sync` does not exist. Load it programmatically through
+`@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 ## Tests
 

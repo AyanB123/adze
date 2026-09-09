@@ -88,9 +88,9 @@ diagnostic, and which one `/review` invoked would depend on load order. See
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-review
-```
+There is no `adze plugin` command yet — `adze plugin dev ./plugins/adze-review`
+does not exist. Load it programmatically through `@adze/plugin-sdk`; see
+[docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 No flags: nothing here is procedural.
 

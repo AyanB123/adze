@@ -75,9 +75,9 @@ not for "load the corpus".
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-adr-context
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-adr-context` does not exist. Load it programmatically through
+`@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 No flags. There is no procedural code, so there is nothing to opt in to — which is the
 whole argument for declarative plugins.

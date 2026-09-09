@@ -10,7 +10,7 @@ Surfaces used: **hooks** (`edit.pre`, `tool.pre`).
 | Rule | Event | Outcome |
 | --- | --- | --- |
 | A search/replace block adds a recognisable credential | `edit.pre` | `deny` |
-| A whole-file `write` contains a recognisable credential | `tool.pre` | `deny` |
+| A whole-file `write` or `edit` `replacement` contains a recognisable credential | `edit.pre` (`content`), with `tool.pre` as backstop | `deny` |
 | A `bash` command contains a recognisable credential | `tool.pre` | `deny` |
 | A CI workflow file is edited without human approval | `edit.pre` | `deny` |
 
@@ -39,20 +39,34 @@ policy question, not an engine question, which is exactly why it belongs in a pl
 
 ## Why two events instead of one
 
-`edit.pre` is the correct event and it is not sufficient.
+`edit.pre` is the semantically correct event and it is now sufficient for anything
+that reaches a file. Its payload carries `content` — the bytes a whole-file write
+would leave on disk — alongside `edits`, so one handler covers all three shapes an
+edit arrives in: a search/replace block, a whole-file `write`, and an `edit` carrying
+a whole-file `replacement`. The file-content credential check lives there and reads
+only tool-agnostic fields, so this plugin no longer has to know which tool produced
+the edit.
 
-Its payload carries `edits: [{ search, replace }]`. That is everything for the `edit`
-tool and **nothing for the `write` tool** — `@adze/plugin-sdk`'s `readCoreWriteArgs`
-reports a whole-file write as `{ path, edits: [], wholeFile: true }`, so the bytes being
-written are not in the declared payload at all. A guard registered only on `edit.pre`
-would refuse a credential added by `edit` and allow the identical credential written by
-`write`, which is the worse case because `write` replaces the whole file.
+It did not used to carry `content`. The payload reported a whole-file write as
+`{ path, edits: [], wholeFile: true }`, so a guard inspecting `edits[].replace` had
+nothing to inspect and allowed the write — and this plugin worked around that by
+checking `arguments.content` on `tool.pre` when the tool was named `write`. That
+workaround had a hole of its own: it keyed on the name `write`, so a credential passed
+as `edit`'s whole-file `replacement` was seen by neither handler and was written. Any
+policy that has to enumerate tool names will eventually miss one.
 
-So the whole-file check runs on `tool.pre`, where `arguments` is a declared payload field
-and `arguments.content` is the actual content. The same handler covers `bash`, because
-`echo <key> > .env` never touches an edit tool.
+`tool.pre` is still registered, for one thing `edit.pre` cannot cover and one it can.
 
-This is a gap in the specified `edit.pre` contract rather than a quirk of this plugin.
+Cannot: `bash`. `echo <key> > .env` leaks a credential without touching an edit tool
+at all, so no edit event fires.
+
+Can: whole-file writes, checked on both events deliberately as a backstop — redundant
+under the default edit-tool mapping, kept because a host can remap which tools derive
+`edit.pre` and a credential guard should fail to allow rather than fail to deny.
+
+The CI-review rule stays on `edit.pre` alone, because it needs `approvedByHuman` — a
+field the `tool.pre` payload does not have.
+
 See [FINDINGS.md](../FINDINGS.md#1-editpre-cannot-see-the-content-of-a-whole-file-write).
 
 ## The escape hatch
@@ -83,9 +97,10 @@ not do:
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-secrets-guard
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-secrets-guard` does not exist (exit code `2`, unknown command).
+Load it programmatically through `@adze/plugin-sdk`; see
+[docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 The hook is `runtime: "js"`, which is **unsandboxed** — it runs in the Adze process with
 full privileges, so the host must opt in with `allowUnsandboxedJs`. That is not a

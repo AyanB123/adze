@@ -95,9 +95,9 @@ JSON and is the correct place for a version, so it is not checked for this rule.
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-license-gate
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-license-gate` does not exist. Load it programmatically through
+`@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 `runtime: "js"`, therefore **unsandboxed**; the host must pass `allowUnsandboxedJs`.
 

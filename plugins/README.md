@@ -38,9 +38,12 @@ most needs.
 
 ## Installing one
 
-```bash
-adze plugin dev ./plugins/adze-secrets-guard
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-secrets-guard` does not exist (exit code `2`, unknown command).
+It is a milestone M3 deliverable. What works today is loading plugins
+**programmatically** through `@adze/plugin-sdk`; see
+[docs/guides/plugins.md](../docs/guides/plugins.md) for the worked script,
+verified against all eight first-party plugins.
 
 The four hook plugins declare `runtime: "js"`, which is **unsandboxed** — an ES module imported
 into the Adze process has the engine's full privileges — so a host must opt in with

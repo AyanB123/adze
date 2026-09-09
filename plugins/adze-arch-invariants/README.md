@@ -84,9 +84,9 @@ are forbidden.
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-arch-invariants
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-arch-invariants` does not exist. Load it programmatically through
+`@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 `runtime: "js"`, therefore **unsandboxed**; the host must pass `allowUnsandboxedJs`.
 

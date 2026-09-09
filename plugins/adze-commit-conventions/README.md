@@ -90,9 +90,9 @@ as one segment instead of two — a spurious `allow` rather than a wrong `deny`.
 
 ## Installing
 
-```bash
-adze plugin dev ./plugins/adze-commit-conventions
-```
+There is no `adze plugin` command yet — `adze plugin dev
+./plugins/adze-commit-conventions` does not exist. Load it programmatically
+through `@adze/plugin-sdk`; see [docs/guides/plugins.md](../../docs/guides/plugins.md).
 
 The hook is `runtime: "js"` and therefore **unsandboxed**; the host must pass
 `allowUnsandboxedJs`. See [FINDINGS.md](../FINDINGS.md#3-the-spec-gives-no-entry-shape-for-four-of-the-six-surfaces)
