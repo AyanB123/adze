@@ -29,7 +29,7 @@ import {
   stdinReader,
 } from '../agent/approval.js';
 import { renderFailure } from '../agent/failure.js';
-import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
+import type { AgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
 import {
   type CliSandbox,
@@ -39,6 +39,7 @@ import {
 } from '../agent/sandbox.js';
 import { type AgentSetup, buildAgent } from '../agent/setup.js';
 import { type RunSummary, renderSummary, summaryJson } from '../agent/summary.js';
+import { type LoadOptions, loadCliConfig, resolveWithFlags } from '../config/index.js';
 import { EXIT, type ExitCode, type Io, type Style, styleFor, writeJsonLine } from '../output.js';
 import { writeTrajectoryFile } from '../sessions/store.js';
 
@@ -68,6 +69,16 @@ export interface TestHooks {
   readonly containment?: CliSandbox;
   /** Isolates provider resolution from the real environment. See {@link buildAgent}. */
   readonly resolve?: Parameters<typeof buildAgent>[0]['resolve'];
+  /**
+   * How `.adze/config.jsonc` and its env vars are resolved.
+   *
+   * When `resolve` is set and this is not, config loads isolated too
+   * (`{ env: {}, ignoreConfigFiles: true }`): a test isolating providers
+   * almost certainly asserts something config-independent, and the developer's
+   * own `~/.adze/config.jsonc` must not decide whether it passes. Pass this
+   * explicitly to test config itself.
+   */
+  readonly config?: LoadOptions;
   readonly reader?: Parameters<typeof promptingChannel>[0]['reader'];
   readonly now?: () => number;
 }
@@ -88,15 +99,36 @@ export async function runRun(
     return EXIT.Usage;
   }
 
-  let invocation: ReturnType<typeof parseAgentFlags>;
+  let invocation: ReturnType<typeof resolveWithFlags>['invocation'];
+  let loaded: ReturnType<typeof resolveWithFlags>['loaded'];
+  let configWarnings: readonly string[];
   try {
-    invocation = parseAgentFlags(options, process.cwd());
+    // Config first: flags overlay it in `resolveWithFlags`, so an absent flag
+    // resolves to the config chain rather than the documented default.
+    const hooksForConfig = options.__testHooks;
+    loaded = await loadCliConfig({
+      cwd: process.cwd(),
+      ...(hooksForConfig?.config ??
+        (hooksForConfig?.resolve !== undefined ? { env: {}, ignoreConfigFiles: true } : {})),
+    });
+    const resolved = resolveWithFlags(options, loaded, process.cwd());
+    invocation = resolved.invocation;
+    // File warnings plus flag-merge filtering (a flag `--forbid` dropping a
+    // file `allow`). Surfaced in the preamble, never silently swallowed.
+    configWarnings = [...loaded.warnings, ...resolved.warnings];
   } catch (error) {
     return renderFailure(error, io, style).code;
   }
 
   const hooks = options.__testHooks;
   const renderer = new EventRenderer({ io, style, json: invocation.json, quiet: invocation.quiet });
+
+  // The workspace root is always writable under `workspace-write`; config
+  // extras widen that set without replacing it. Empty extras keep the
+  // historical `[]` (empty means the workspace root only) in the plan's
+  // recorded roots and the gate alike.
+  const extraRoots = [...loaded.writableRoots];
+  const planRoots = [invocation.workspaceRoot, ...extraRoots];
 
   // Before the approval channel, because the prompt has to tell the user whether an
   // approved command will be confined, and only the plan knows. Deriving that from
@@ -107,9 +139,7 @@ export async function runRun(
     hooks?.containment ??
     (await createCliSandbox({
       mode: invocation.sandboxMode,
-      // Matches what core's gate passes to `exec`: `SandboxConfig.writableRoots` is empty
-      // here, and the gate resolves empty to the workspace root.
-      writableRoots: [invocation.workspaceRoot],
+      writableRoots: planRoots,
       approvals: invocation.approvals,
       commandRules: invocation.commandRules,
     }));
@@ -142,6 +172,13 @@ export async function runRun(
       sandboxMode: invocation.sandboxMode,
       approvals: invocation.approvals,
       commandRules: invocation.commandRules,
+      // Previously hardcoded to empty, which made `sandbox.writableRoots` and
+      // `sandbox.allowedNetworkHosts` unreachable from the CLI despite being
+      // honoured fields. The workspace root stays in the set: extras widen it
+      // rather than replacing it, so configuring a build directory cannot
+      // silently make the workspace itself need approval.
+      writableRoots: extraRoots.length > 0 ? [invocation.workspaceRoot, ...extraRoots] : [],
+      allowedNetworkHosts: [...loaded.allowedNetworkHosts],
       instructions: invocation.instructions,
       sink: tracker.sink(renderer),
       approvalChannel: approvals,
@@ -162,6 +199,7 @@ export async function runRun(
       startedAt,
       now: hooks?.now ?? Date.now,
       wantTrajectory,
+      configWarnings,
     });
   } catch (error) {
     await persistFailedTrajectory(
@@ -210,7 +248,7 @@ class TrajectoryTracker {
 interface DriveRunArgs {
   readonly agent: AgentSetup;
   readonly prompt: string;
-  readonly invocation: ReturnType<typeof parseAgentFlags>;
+  readonly invocation: ReturnType<typeof resolveWithFlags>['invocation'];
   readonly io: Io;
   readonly style: Style;
   readonly renderer: EventRenderer;
@@ -219,6 +257,8 @@ interface DriveRunArgs {
   readonly startedAt: number;
   readonly now: () => number;
   readonly wantTrajectory: boolean;
+  /** Config warnings (unknown keys, narrowed values, dropped rules). */
+  readonly configWarnings: readonly string[];
 }
 
 /**
@@ -238,7 +278,12 @@ async function driveRun(args: DriveRunArgs): Promise<ExitCode> {
 
   const dev = await readPluginDev(agent.workspaceRoot);
   if (!invocation.json) {
-    renderPreamble(agent, invocation, init.warnings, io, style, dev);
+    renderPreamble(agent, invocation, init.warnings, args.configWarnings, io, style, dev);
+  } else {
+    // stdout stays pure JSONL; diagnostics go to stderr like the approval UI.
+    for (const warning of args.configWarnings) {
+      io.err(`${style.warn('config warning')} ${warning}\n`);
+    }
   }
 
   const { sessionId } = await agent.engine.sessionCreate({
@@ -296,7 +341,7 @@ async function submitAndAwait(
   agent: AgentSetup,
   sessionId: string,
   prompt: string,
-  invocation: ReturnType<typeof parseAgentFlags>,
+  invocation: ReturnType<typeof resolveWithFlags>['invocation'],
   io: Io,
   style: Style,
 ): Promise<TurnOutcome> {
@@ -412,8 +457,9 @@ async function persistTrajectory(
  */
 function renderPreamble(
   agent: AgentSetup,
-  invocation: ReturnType<typeof parseAgentFlags>,
+  invocation: ReturnType<typeof resolveWithFlags>['invocation'],
   warnings: readonly Warning[],
+  configWarnings: readonly string[],
   io: Io,
   style: Style,
   dev: { readonly id: string; readonly root: string } | undefined,
@@ -431,6 +477,12 @@ function renderPreamble(
   }
   for (const warning of warnings) {
     io.err(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
+  }
+  // Config warnings are printed, never swallowed: an ignored key or a narrowed
+  // policy changes what the line above means, and the user reads that line to
+  // decide whether to approve.
+  for (const warning of configWarnings) {
+    io.err(`${style.warn('config warning')} ${warning}\n`);
   }
   io.err('\n');
 }

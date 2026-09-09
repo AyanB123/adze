@@ -13,6 +13,7 @@
  */
 
 import { ProviderConfigurationError, ProviderRequestError } from '@adze/providers';
+import { ConfigError } from '../config/index.js';
 import { EXIT, type ExitCode, type Io, type Style } from '../output.js';
 import { UsageError } from './flags.js';
 
@@ -28,7 +29,9 @@ export interface FailureRender {
  * "the agent could not finish the task", which is the whole reason the codes are distinct.
  */
 export function renderFailure(error: unknown, io: Io, style: Style): FailureRender {
-  if (error instanceof UsageError) {
+  // A malformed `.adze/config.jsonc` is a usage error like a bad flag: the
+  // invocation was wrong rather than the work, and the hints say how to fix it.
+  if (error instanceof UsageError || error instanceof ConfigError) {
     io.err(`${style.bad('adze:')} ${error.message}\n`);
     for (const hint of error.hints) io.err(`  ${style.dim(hint)}\n`);
     return { code: EXIT.Usage };

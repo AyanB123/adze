@@ -43,6 +43,12 @@ import {
   mechanismName,
   orderedDegradations,
 } from '../agent/sandbox.js';
+import {
+  type ConfigSource,
+  type LoadedConfig,
+  type LoadOptions,
+  loadCliConfig,
+} from '../config/index.js';
 import { EXIT, type ExitCode, field, type Io, type Style, styleFor, writeJson } from '../output.js';
 import { resolveShellPrefix, SHELL_PROGRAM_ENV, shellOverrideAdvice } from '../shell.js';
 import { CLI_VERSION, MINIMUM_NODE_VERSION } from '../version.js';
@@ -79,6 +85,14 @@ export interface DoctorOptions {
     readonly probe?: HostProbe;
     /** Overrides the workspace root plugin state is read from. Test-only. */
     readonly cwd?: string;
+    /**
+     * How `.adze/config.jsonc` and its env vars are resolved.
+     *
+     * Without it the config section reports the real machine, for the same
+     * reason `resolve` exists for providers. Pass
+     * `{ env: {}, ignoreConfigFiles: true }` for a hermetic assertion.
+     */
+    readonly config?: LoadOptions;
   };
 }
 
@@ -541,11 +555,17 @@ async function buildChecks(section: ProviderSection, shell: ShellCheck): Promise
  * `platform` is passed rather than read from `process`, so the Windows wording is
  * reachable from a test on any host.
  */
-function renderSandbox(plan: ContainmentPlan, platform: string, io: Io): void {
+function renderSandbox(
+  plan: ContainmentPlan,
+  platform: string,
+  io: Io,
+  resolvedMode: typeof DEFAULT_SANDBOX_MODE,
+  resolvedApprovals: typeof DEFAULT_APPROVAL_POLICY,
+): void {
   const s = styleFor(false);
   io.out(`${s.bold('Sandbox')}\n`);
-  io.out(`${field('default mode', DEFAULT_SANDBOX_MODE)}\n`);
-  io.out(`${field('default approvals', DEFAULT_APPROVAL_POLICY)}\n`);
+  io.out(`${field('default mode', resolvedMode)}\n`);
+  io.out(`${field('default approvals', resolvedApprovals)}\n`);
   io.out(`${field('mechanism', mechanismName(plan.mechanism))}\n`);
   io.out(`${field('OS containment', enforcementLabel(plan, s))}\n`);
   io.out(`${field('network', networkLabel(plan, s))}\n`);
@@ -663,26 +683,264 @@ function renderPlugins(
   io.out('\n');
 }
 
+/** Resolution outcome for `.adze/config.jsonc`, with a malformed file reported rather than thrown. */
+interface ConfigSection {
+  readonly loaded: LoadedConfig | undefined;
+  /** Set when the file could not be parsed. */
+  readonly error: string | undefined;
+}
+
+async function buildConfigSection(
+  options: DoctorOptions,
+  workspaceRoot: string,
+): Promise<ConfigSection> {
+  try {
+    const loaded = await loadCliConfig({
+      cwd: workspaceRoot,
+      ...options.__testHooks?.config,
+    });
+    return { loaded, error: undefined };
+  } catch (cause) {
+    // Same rule as providers: this is the command a user runs *because*
+    // something is wrong, so it survives the thing that is wrong.
+    return { loaded: undefined, error: cause instanceof Error ? cause.message : String(cause) };
+  }
+}
+
+function sourceLabel(source: ConfigSource | 'mixed'): string {
+  switch (source) {
+    case 'flag':
+      return 'from --flag';
+    case 'env':
+      return 'from environment';
+    case 'workspace':
+      return 'from workspace .adze/config.jsonc';
+    case 'user':
+      return 'from ~/.adze/config.jsonc';
+    case 'mixed':
+      return 'from several layers (see --json)';
+    case 'default':
+      return 'default';
+  }
+}
+
+function renderConfig(section: ConfigSection, io: Io, style: Style): void {
+  io.out(`${style.bold('Config')}\n`);
+
+  if (section.loaded === undefined || section.error !== undefined) {
+    io.out(`${field('config', style.bad('unreadable'))}\n`);
+    if (section.error !== undefined) io.out(`       ${style.dim(section.error)}\n\n`);
+    return;
+  }
+  const config = section.loaded;
+
+  const ruleSource = (
+    rules: readonly { readonly source: ConfigSource }[],
+  ): ConfigSource | 'mixed' => {
+    if (rules.length === 0) return 'default';
+    const sources = new Set(rules.map((rule) => rule.source));
+    if (sources.size === 1) return [...sources][0] ?? 'default';
+    return 'mixed';
+  };
+  const allowSource = ruleSource(config.allowRules);
+  const forbidSource = ruleSource(config.forbidRules);
+
+  const rows: readonly (readonly [string, string, ConfigSource | 'mixed'])[] = [
+    ['engine.model', config.engineModel ?? style.dim('none set'), config.engineModelSource],
+    ['engine.effort', config.effort ?? style.dim('unset'), config.effortSource],
+    [
+      'engine.temperature',
+      config.temperature?.toString() ?? style.dim('unset'),
+      config.temperatureSource,
+    ],
+    [
+      'engine.maxTokens',
+      config.maxTokens?.toString() ?? style.dim('unbounded'),
+      config.maxTokensSource,
+    ],
+    [
+      'engine.maxOutputTokens',
+      config.maxOutputTokens?.toString() ?? style.dim('unset'),
+      config.maxOutputTokensSource,
+    ],
+    ['sandbox.broker', config.sandboxBroker, config.sandboxBrokerSource],
+    ['sandbox.mode', config.sandboxMode, config.sandboxModeSource],
+    [
+      'sandbox.writableRoots',
+      config.writableRoots.length > 0
+        ? config.writableRoots.join(', ')
+        : style.dim('workspace root only'),
+      config.writableRootsSource,
+    ],
+    [
+      'sandbox.allowedNetworkHosts',
+      config.allowedNetworkHosts.length > 0
+        ? config.allowedNetworkHosts.join(', ')
+        : style.dim('none'),
+      config.allowedNetworkHostsSource,
+    ],
+    ['approvals.policy', config.approvalPolicy, config.approvalPolicySource],
+    [
+      'commandRules.allow',
+      config.allowRules.length > 0
+        ? config.allowRules.map((rule) => rule.prefix).join(', ')
+        : style.dim('none'),
+      allowSource,
+    ],
+    [
+      'commandRules.forbid',
+      config.forbidRules.length > 0
+        ? config.forbidRules.map((rule) => rule.prefix).join(', ')
+        : style.dim('none'),
+      forbidSource,
+    ],
+    [
+      'plugins.allowUnsandboxedJs',
+      String(config.pluginsAllowUnsandboxedJs),
+      config.pluginsAllowUnsandboxedJsSource,
+    ],
+    ['plugins.allowNative', String(config.pluginsAllowNative), config.pluginsAllowNativeSource],
+    ['plugins.onHookFailure', config.pluginsOnHookFailure, config.pluginsOnHookFailureSource],
+    ['workflows.todo', String(config.workflowsTodo), config.workflowsTodoSource],
+    [
+      'workflows.defaultPack',
+      config.workflowsDefaultPack ?? style.dim('unset'),
+      config.workflowsDefaultPackSource,
+    ],
+    [
+      'gallery.openVsxUrl',
+      config.galleryOpenVsxUrl ?? style.dim('unset'),
+      config.galleryOpenVsxUrlSource,
+    ],
+    ['engines.adze', config.enginesAdze ?? style.dim('unset'), config.enginesAdzeSource],
+  ];
+  for (const [key, value, source] of rows) {
+    io.out(`${field(key, value)} ${style.dim(`(${sourceLabel(source)})`)}\n`);
+  }
+  if (config.filesRead.length > 0) {
+    io.out(`${field('config read from', config.filesRead.join(', '))}\n`);
+  }
+  // Loud warnings: unknown keys, narrowed values, dropped rules. A typo'd
+  // policy key that does nothing would otherwise be invisible here.
+  for (const warning of config.warnings) {
+    io.out(`  ${style.warn('warning')} ${warning}\n`);
+  }
+  io.out('\n');
+}
+
+function configJson(section: ConfigSection): Record<string, unknown> {
+  if (section.loaded === undefined) {
+    return { readable: false, ...(section.error === undefined ? {} : { error: section.error }) };
+  }
+  const config = section.loaded;
+  const sourced = <T>(value: T, source: ConfigSource): { value: T; source: ConfigSource } => ({
+    value,
+    source,
+  });
+  return {
+    readable: true,
+    filesRead: [...config.filesRead],
+    warnings: [...config.warnings],
+    ...(section.error === undefined ? {} : { error: section.error }),
+    values: {
+      engineModel: sourced(config.engineModel ?? null, config.engineModelSource),
+      effort: sourced(config.effort ?? null, config.effortSource),
+      temperature: sourced(config.temperature ?? null, config.temperatureSource),
+      maxTokens: sourced(config.maxTokens ?? null, config.maxTokensSource),
+      maxOutputTokens: sourced(config.maxOutputTokens ?? null, config.maxOutputTokensSource),
+      sandboxBroker: sourced(config.sandboxBroker, config.sandboxBrokerSource),
+      sandboxMode: sourced(config.sandboxMode, config.sandboxModeSource),
+      writableRoots: sourced([...config.writableRoots], config.writableRootsSource),
+      allowedNetworkHosts: sourced(
+        [...config.allowedNetworkHosts],
+        config.allowedNetworkHostsSource,
+      ),
+      approvalPolicy: sourced(config.approvalPolicy, config.approvalPolicySource),
+      allowRules: config.allowRules.map((rule) => ({ prefix: rule.prefix, source: rule.source })),
+      forbidRules: config.forbidRules.map((rule) => ({ prefix: rule.prefix, source: rule.source })),
+      promptRules: config.promptRules.map((rule) => ({ prefix: rule.prefix, source: rule.source })),
+      pluginsAllowUnsandboxedJs: sourced(
+        config.pluginsAllowUnsandboxedJs,
+        config.pluginsAllowUnsandboxedJsSource,
+      ),
+      pluginsAllowNative: sourced(config.pluginsAllowNative, config.pluginsAllowNativeSource),
+      pluginsOnHookFailure: sourced(config.pluginsOnHookFailure, config.pluginsOnHookFailureSource),
+      pluginsDirs: sourced([...config.pluginsDirs], config.pluginsDirsSource),
+      pluginsEnable: sourced([...config.pluginsEnable], config.pluginsEnableSource),
+      pluginsDisable: sourced([...config.pluginsDisable], config.pluginsDisableSource),
+      workflowsTodo: sourced(config.workflowsTodo, config.workflowsTodoSource),
+      workflowsDefaultPack: sourced(
+        config.workflowsDefaultPack ?? null,
+        config.workflowsDefaultPackSource,
+      ),
+      galleryOpenVsxUrl: sourced(config.galleryOpenVsxUrl ?? null, config.galleryOpenVsxUrlSource),
+      enginesAdze: sourced(config.enginesAdze ?? null, config.enginesAdzeSource),
+    },
+  };
+}
+
+/**
+ * The sandbox boundary `run` and `chat` will actually apply under this config.
+ *
+ * Extracted so `runDoctor` stays under the complexity ceiling: the resolution
+ * (config values with documented-default fallback) reads separately from the
+ * rendering, and the two fail for unrelated reasons.
+ */
+async function resolveDoctorSandbox(
+  configSection: ConfigSection,
+  workspaceRoot: string,
+  probe: HostProbe | undefined,
+): Promise<{
+  readonly plan: ContainmentPlan;
+  readonly mode: typeof DEFAULT_SANDBOX_MODE;
+  readonly approvals: typeof DEFAULT_APPROVAL_POLICY;
+}> {
+  const loaded = configSection.loaded;
+  const mode = loaded?.sandboxMode ?? DEFAULT_SANDBOX_MODE;
+  const approvals = loaded?.approvalPolicy ?? DEFAULT_APPROVAL_POLICY;
+  const { plan } = await createCliSandbox({
+    mode,
+    writableRoots: [workspaceRoot, ...(loaded?.writableRoots ?? [])],
+    approvals,
+    commandRules: [
+      ...(loaded?.allowRules.map((rule) => ({ prefix: rule.prefix, action: 'allow' as const })) ??
+        []),
+      ...(loaded?.forbidRules.map((rule) => ({
+        prefix: rule.prefix,
+        action: 'forbid' as const,
+      })) ?? []),
+      ...(loaded?.promptRules.map((rule) => ({
+        prefix: rule.prefix,
+        action: 'prompt' as const,
+      })) ?? []),
+    ],
+    ...(probe === undefined ? {} : { probe }),
+  });
+  return { plan, mode, approvals };
+}
+
 export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCode> {
   const json = options.json === true;
   const s = styleFor(json);
   const section = buildProviderSection(options);
-  const shell = await (options.__testHooks?.probeShell ?? probeShell)();
-  const checks = await buildChecks(section, shell);
   const probe = options.__testHooks?.probe;
   const workspaceRoot = options.__testHooks?.cwd ?? process.cwd();
+  const configSection = await buildConfigSection(options, workspaceRoot);
+  const shell = await (options.__testHooks?.probeShell ?? probeShell)();
+  const checks = await buildChecks(section, shell);
   const { readDevOverride, readInstalled } = await import('../plugins/store.js');
   const installed = await readInstalled(workspaceRoot);
   const dev = await readDevOverride(workspaceRoot);
-  // The same call `run` and `chat` make, with the same defaults, so this command reports
-  // the boundary a user is actually about to get rather than a second opinion about it.
-  const { plan } = await createCliSandbox({
-    mode: DEFAULT_SANDBOX_MODE,
-    writableRoots: [process.cwd()],
-    approvals: DEFAULT_APPROVAL_POLICY,
-    commandRules: [],
-    ...(probe === undefined ? {} : { probe }),
-  });
+  // The same call `run` and `chat` make, resolved from the same config chain,
+  // so this command reports the boundary a user is actually about to get rather
+  // than a second opinion about it. A malformed config file falls back to the
+  // documented defaults here (the error is reported in the Config section)
+  // because this command must survive the thing that is wrong.
+  const {
+    plan,
+    mode: resolvedMode,
+    approvals: resolvedApprovals,
+  } = await resolveDoctorSandbox(configSection, workspaceRoot, probe);
   const platform = probe?.platform ?? process.platform;
   const failed = checks.filter((c) => c.required && !c.ok);
 
@@ -718,14 +976,15 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
         })),
       },
       sandbox: {
-        defaultMode: DEFAULT_SANDBOX_MODE,
-        defaultApprovalPolicy: DEFAULT_APPROVAL_POLICY,
+        defaultMode: resolvedMode,
+        defaultApprovalPolicy: resolvedApprovals,
         // `enforcement`, `osLevelContainment`, the mechanism, the network plan, and every
         // degradation, all from the one plan. A consumer gating CI on containment needs
         // the gaps as data, not as a paragraph it has to parse out of the text output.
         ...containmentJson(plan),
         reference: 'docs/architecture/adr/0007-sandbox-and-permissions.md',
       },
+      config: configJson(configSection),
       plugins: {
         installed: installed.map((entry) => ({ id: entry.id, root: entry.root })),
         dev: dev ?? null,
@@ -749,8 +1008,9 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   io.out('\n');
 
   renderProviders(section, io, s);
+  renderConfig(configSection, io, s);
   renderPlugins(installed, dev, io, s);
-  renderSandbox(plan, platform, io);
+  renderSandbox(plan, platform, io, resolvedMode, resolvedApprovals);
 
   if (failed.length > 0) {
     io.err(`\n${s.bad(`${failed.length} required check(s) failed.`)}\n`);

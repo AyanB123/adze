@@ -58,6 +58,19 @@ export interface AgentOptions {
   readonly sandboxMode: SandboxMode;
   readonly approvals: ApprovalPolicy;
   readonly commandRules: readonly CommandRule[];
+  /**
+   * Extra writable roots under `workspace-write`, from `.adze/config.jsonc`
+   * (`sandbox.writableRoots`) or `ADZE_WRITABLE_ROOTS`. Empty means the
+   * workspace root only. Every entry must be absolute; `@adze/sdk` validates
+   * that for embedders and the CLI resolves them the same way.
+   */
+  readonly writableRoots?: readonly string[];
+  /**
+   * Hosts reachable when the mode would otherwise deny network, from
+   * `sandbox.allowedNetworkHosts` or `ADZE_ALLOWED_HOSTS`. Matched by exact
+   * host string.
+   */
+  readonly allowedNetworkHosts?: readonly string[];
   readonly instructions?: string | undefined;
   readonly sink: EventSink;
   readonly approvalChannel: ApprovalChannel;
@@ -121,8 +134,8 @@ export function buildAgent(options: AgentOptions): AgentSetup {
 
   const sandbox: SandboxConfig = {
     mode: options.sandboxMode,
-    writableRoots: [],
-    allowedNetworkHosts: [],
+    writableRoots: [...(options.writableRoots ?? [])],
+    allowedNetworkHosts: [...(options.allowedNetworkHosts ?? [])],
     commandRules: [...options.commandRules],
   };
 

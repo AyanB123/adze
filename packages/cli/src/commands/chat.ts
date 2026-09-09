@@ -47,11 +47,12 @@ import {
   stdinReader,
 } from '../agent/approval.js';
 import { renderFailure } from '../agent/failure.js';
-import { type AgentFlags, parseAgentFlags } from '../agent/flags.js';
+import type { AgentFlags } from '../agent/flags.js';
 import { EventRenderer } from '../agent/render.js';
 import { containmentLine, createCliSandbox, degradationLines } from '../agent/sandbox.js';
 import { type AgentSetup, buildAgent } from '../agent/setup.js';
 import { renderSummary } from '../agent/summary.js';
+import { loadCliConfig, resolveWithFlags } from '../config/index.js';
 import { EXIT, type ExitCode, field, type Io, type Style, styleFor } from '../output.js';
 import {
   buildCompactSummary,
@@ -102,9 +103,19 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
   // a stream does not need a prompt. `adze run --json` is the scriptable form.
   const style = styleFor(false);
 
-  let invocation: ReturnType<typeof parseAgentFlags>;
+  let invocation: ReturnType<typeof resolveWithFlags>['invocation'];
+  let loaded: ReturnType<typeof resolveWithFlags>['loaded'];
+  let configWarnings: readonly string[];
   try {
-    invocation = parseAgentFlags({ ...options, json: false }, process.cwd());
+    const hooksForConfig = options.__testHooks;
+    loaded = await loadCliConfig({
+      cwd: process.cwd(),
+      ...(hooksForConfig?.config ??
+        (hooksForConfig?.resolve !== undefined ? { env: {}, ignoreConfigFiles: true } : {})),
+    });
+    const resolved = resolveWithFlags({ ...options, json: false }, loaded, process.cwd());
+    invocation = resolved.invocation;
+    configWarnings = [...loaded.warnings, ...resolved.warnings];
   } catch (error) {
     return renderFailure(error, io, style).code;
   }
@@ -114,11 +125,14 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
   // The real mechanism for this host, and the plan it will apply. Built before the
   // approval channel because the prompt has to say whether an approved command will be
   // confined, and only the plan knows that — see the same note in `run`.
+  // The workspace root is always writable under `workspace-write`; config
+  // extras widen that set without replacing it (see `run` for why).
+  const extraRoots = [...loaded.writableRoots];
   const containment =
     hooks?.containment ??
     (await createCliSandbox({
       mode: invocation.sandboxMode,
-      writableRoots: [invocation.workspaceRoot],
+      writableRoots: [invocation.workspaceRoot, ...extraRoots],
       approvals: invocation.approvals,
       commandRules: invocation.commandRules,
     }));
@@ -140,6 +154,8 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
       sandboxMode: invocation.sandboxMode,
       approvals: invocation.approvals,
       commandRules: invocation.commandRules,
+      writableRoots: extraRoots.length > 0 ? [invocation.workspaceRoot, ...extraRoots] : [],
+      allowedNetworkHosts: [...loaded.allowedNetworkHosts],
       instructions: invocation.instructions,
       sink: renderer.sink,
       approvalChannel: approvals,
@@ -153,7 +169,7 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
     return renderFailure(error, io, style).code;
   }
 
-  renderBanner(agent, invocation, io, style);
+  renderBanner(agent, invocation, configWarnings, io, style);
 
   const dev = await readPluginDev(agent.workspaceRoot);
   if (dev !== undefined) {
@@ -208,7 +224,8 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
  */
 function renderBanner(
   agent: AgentSetup,
-  invocation: ReturnType<typeof parseAgentFlags>,
+  invocation: ReturnType<typeof resolveWithFlags>['invocation'],
+  configWarnings: readonly string[],
   io: Io,
   style: Style,
 ): void {
@@ -231,6 +248,9 @@ function renderBanner(
   for (const warning of init.warnings) {
     io.out(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
   }
+  for (const warning of configWarnings) {
+    io.out(`${style.warn('config warning')} ${warning}\n`);
+  }
   io.out('\n');
 }
 
@@ -247,7 +267,7 @@ async function readPluginDev(
 
 interface ReplContext {
   readonly agent: AgentSetup;
-  readonly invocation: ReturnType<typeof parseAgentFlags>;
+  readonly invocation: ReturnType<typeof resolveWithFlags>['invocation'];
   readonly reader: LineReader;
   readonly approvals: ApprovalChannel;
   readonly io: Io;
@@ -482,7 +502,7 @@ interface SlashContext {
   readonly io: Io;
   readonly style: Style;
   readonly agent: AgentSetup;
-  readonly invocation: ReturnType<typeof parseAgentFlags>;
+  readonly invocation: ReturnType<typeof resolveWithFlags>['invocation'];
   readonly now: () => number;
   readonly state: PersistedState;
   readonly reader: LineReader;
@@ -681,13 +701,27 @@ async function handleInit(ctx: SlashContext): Promise<void> {
   const kept: string[] = [];
 
   const configPath = join(agent.workspaceRoot, '.adze', 'config.jsonc');
+  // The scaffold documents every section with its default. `engines.adze` is
+  // stamped with the running engine so a future version can warn when the file
+  // was written for something older — the same compat check plugins get.
   const configTemplate = [
     '{',
     '  // Adze workspace config (JSONC: comments allowed). Provider credentials live',
     '  // in .adze/providers.json or the environment — never here.',
+    '  // Precedence: CLI flags > environment > this file > ~/.adze/config.jsonc > defaults.',
     '  // See docs/guides/configuration.md.',
     '  "$schema": "../node_modules/@adze/cli/config.schema.json",',
-    '  "defaultModel": null',
+    `  "engines": { "adze": "${CLI_VERSION}" },`,
+    '  // "engine": { "model": "anthropic/claude-sonnet-4-5", "effort": "medium",',
+    '  //   "temperature": 0.7, "maxTokens": 200000, "maxOutputTokens": 8192 },',
+    '  // "sandbox": { "broker": "auto", "mode": "workspace-write",',
+    '  //   "writableRoots": [], "allowedNetworkHosts": [] },',
+    '  // "approvals": { "policy": "on-request" },',
+    '  // "commandRules": { "allow": ["pnpm test"], "forbid": ["git push"] },',
+    '  // "plugins": { "allowUnsandboxedJs": false, "allowNative": false,',
+    '  //   "onHookFailure": "refuse", "dirs": [], "enable": [], "disable": [] },',
+    '  // "workflows": { "todo": true },',
+    '  // "gallery": { "openVsxUrl": "https://open-vsx.org" },',
     '}',
     '',
   ].join('\n');
