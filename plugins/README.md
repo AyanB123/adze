@@ -1,10 +1,10 @@
 # Plugins
 
-Eight first-party plugins, plus the two `acme.*` example fixtures that ship with
+Thirteen first-party plugins, plus the two `acme.*` example fixtures that ship with
 [the spec](../docs/plugins/spec.md).
 
-A plugin is a directory containing `adze.plugin.json`. That is the whole requirement — six of
-the eight below contain no executable code at all.
+A plugin is a directory containing `adze.plugin.json`. That is the whole requirement — eight of
+the thirteen below contain no executable code at all.
 
 **Read [FINDINGS.md](FINDINGS.md) first if you are working on the SDK.** It records the places
 `docs/plugins/spec.md` or `packages/plugin-sdk` turned out to be wrong, ambiguous, or
@@ -24,6 +24,11 @@ most needs.
 | [`adze-review`](adze-review/) | read-only subagents that audit a diff, an apply failure, or a benchmark report | subagents, commands, UI |
 | [`adze-test-first`](adze-test-first/) | write-a-failing-test-then-fix as a first-class workflow; turns a model failure into a permanent case | commands |
 | [`adze-docs-sync`](adze-docs-sync/) | finds documentation the code has outgrown, in both directions | commands, subagents |
+| [`adze-destructive-guard`](adze-destructive-guard/) | denies shell commands that delete data or take down shared infrastructure | hooks |
+| [`adze-esm-hygiene`](adze-esm-hygiene/) | denies CommonJS syntax and relative imports missing the `.js` extension | hooks |
+| [`adze-wip-guard`](adze-wip-guard/) | denies temporary commit markers and direct pushes to `main`/`master` | hooks |
+| [`adze-ops-runbook`](adze-ops-runbook/) | deploy and rollback checklists with a read-only operations reviewer | commands, subagents |
+| [`adze-narrow-scope`](adze-narrow-scope/) | narrow phases with one concern per commit; audits a diff for bundled changes | commands, subagents |
 
 ## Surface coverage
 
@@ -31,9 +36,9 @@ most needs.
 | --- | --- | --- | --- |
 | 1 | Tools (MCP) | — | **deliberately not covered.** [Why](FINDINGS.md#7-surface-1-is-not-exercised-by-any-first-party-plugin-deliberately) |
 | 2 | Context providers | `adr-context` | five glob providers, resolved against a filesystem in tests |
-| 3 | Slash commands | `commit-conventions`, `test-first`, `review`, `docs-sync`, `adr-context` | eight commands |
-| 4 | Hooks | `secrets-guard`, `commit-conventions`, `license-gate`, `arch-invariants` | seven hook registrations across `edit.pre` and `tool.pre`; every denial tested through core's dispatcher |
-| 5 | Subagents | `review`, `docs-sync` | four, all read-only, narrowing asserted from the widening direction |
+| 3 | Slash commands | `commit-conventions`, `test-first`, `review`, `docs-sync`, `adr-context`, `ops-runbook`, `narrow-scope` | twelve commands |
+| 4 | Hooks | `secrets-guard`, `commit-conventions`, `license-gate`, `arch-invariants`, `destructive-guard`, `esm-hygiene`, `wip-guard` | eleven hook registrations across `edit.pre` and `tool.pre`; every denial tested through core's dispatcher |
+| 5 | Subagents | `review`, `docs-sync`, `ops-runbook`, `narrow-scope` | six, all read-only, narrowing asserted from the widening direction |
 | 6 | UI | `review` | one contribution, **refused by the engine** and available to the surface only — which is the behaviour being demonstrated |
 
 ## Installing one
@@ -58,15 +63,15 @@ State lives in `.adze/plugins/` (local-only, gitignored). `add` accepts a local
 path or a git URL and executes nothing before consent. What also works is
 loading plugins **programmatically** through `@adze/plugin-sdk`; see
 [docs/guides/plugins.md](../docs/guides/plugins.md) for the worked script,
-verified against all eight first-party plugins.
+verified against all thirteen first-party plugins.
 
-The four hook plugins declare `runtime: "js"`, which is **unsandboxed** — an ES module imported
+The seven hook plugins declare `runtime: "js"`, which is **unsandboxed** — an ES module imported
 into the Adze process has the engine's full privileges — so a host must opt in with
 `allowUnsandboxedJs`. That is not a statement that these plugins are trusted; it is the honest
 state of the SDK, which ships the `wasm32-wasip2` host interface and no WASM runtime. A
 published build would compile to WebAssembly and need no flag.
 
-The four declarative plugins need no flags at all.
+The six declarative plugins need no flags at all.
 
 ## Running the tests
 
@@ -82,7 +87,7 @@ node ../node_modules/vitest/vitest.mjs run
 node ../node_modules/@biomejs/biome/bin/biome check .
 ```
 
-201 tests across eight files. No test touches the network, spawns a process, or needs a model
+271 tests across thirteen files. No test touches the network, spawns a process, or needs a model
 key.
 
 Every denial is driven through `dispatchToolCall` from `@adze/core` with a real `HookBus`,
@@ -95,12 +100,12 @@ proving is that `deny` stops the call, and that is a fact about core's dispatch 
 `adze.plugin.json`, loads every one, and asserts the properties that should hold across the set
 — no network permission, no `workspace-write`, no UI reaching the engine, every hook refused
 when the host has not opted in, and every plugin refused against an engine version outside its
-declared range. A ninth plugin added later is covered the moment it exists.
+declared range. A fourteenth plugin added later is covered the moment it exists.
 
 ## Writing your own
 
 Start from `docs/plugins/spec.md`, then read `packages/plugin-sdk/src/manifest.ts` — the spec
 shows a comment where four of the six contribution shapes should be, so the implementation is
-where they actually are. `FINDINGS.md` lists the walls the eight above ran into.
+where they actually are. `FINDINGS.md` lists the walls the eight original plugins ran into.
 
 If you hit one that is not there, that is the bug report the project most wants.
