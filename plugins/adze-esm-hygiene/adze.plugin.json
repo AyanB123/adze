@@ -1,0 +1,37 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.esm-hygiene",
+  "version": "0.1.0",
+  "displayName": "ESM Hygiene",
+  "description": "Denies CommonJS imports in the ESM-only codebase and relative imports missing the .js extension.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "hooks": [
+      {
+        "event": "edit.pre",
+        "module": "hooks/hygiene.mjs",
+        "runtime": "js",
+        "paths": [
+          "packages/**/*.ts",
+          "packages/**/*.js",
+          "packages/**/*.mjs",
+          "apps/**/*.ts",
+          "bench/**/*.ts"
+        ],
+        "timeoutMs": 500
+      },
+      {
+        "event": "tool.pre",
+        "module": "hooks/hygiene.mjs",
+        "runtime": "js",
+        "tools": ["write"],
+        "timeoutMs": 500
+      }
+    ]
+  },
+  "permissions": {
+    "filesystem": "none"
+  }
+}
