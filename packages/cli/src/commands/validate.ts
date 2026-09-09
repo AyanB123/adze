@@ -12,7 +12,7 @@
 
 import { readFile } from 'node:fs/promises';
 import type { ValidationResult } from '@adze/apply';
-import { detectLanguage, validate } from '@adze/apply';
+import { detectLanguage, validateAsync } from '@adze/apply';
 import { EXIT, type ExitCode, type Io, styleFor, writeJson } from '../output.js';
 
 export interface ValidateOptions {
@@ -45,7 +45,10 @@ async function validateOne(path: string): Promise<FileReport> {
   }
 
   const language = detectLanguage(path);
-  const result = validate(content, language);
+  // Async on purpose: the synchronous entry is structural-only by design, so only
+  // this path can report `tree-sitter` when grammars are present. Without grammars
+  // it falls back to the same structural checker and says so.
+  const result = await validateAsync(content, language);
 
   // `validator: 'none'` with `ok: true` means "we did not look", not "it is fine".
   if (result.validator === 'none') {
