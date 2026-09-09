@@ -56,6 +56,17 @@ export {
   redactTaskRecord,
   SOLUTION_BEARING_FIELDS,
 } from './leakage.js';
+export type { NepSummary } from './nep.js';
+export {
+  checkNepSummary,
+  hasNepProvenance,
+  languageBreakdown,
+  NEP_SUITE,
+  NEP_V0_MAX_CASES,
+  NEP_V0_MIN_CASES,
+  renderNepSummary,
+  summarizeNep,
+} from './nep.js';
 export type { FencedParse, WellFormedSummary } from './polyglot.js';
 export {
   isWellFormedCase,

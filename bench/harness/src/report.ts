@@ -112,6 +112,26 @@ function limitations(report: BenchReport): string[] {
       '— there is only one synthetic source of inputs.',
       '',
     );
+  } else if (report.suite === 'nep-bench') {
+    lines.push(
+      '**These numbers measure prefix-to-edit reconstruction by the applier given the',
+      'true edit — not model behavior, and not next-edit prediction.** Every case is',
+      'a (prefix-context, next-edit) pair mined from real Adze commit sequences',
+      '(`inputSource: synthetic`, deterministic, one attempt): the runner hands the',
+      'ground-truth hunk to `@adze/apply` and checks the output is byte-identical',
+      'to the mined post-image. No model proposes an edit anywhere in this loop,',
+      'so nothing here is evidence about how any model predicts an edit, and the',
+      'per-tier, per-strategy, and per-language tables below must not be described',
+      'as "per model".',
+      '',
+      '**Input distribution, stated plainly.** One repo (Adze itself), not a',
+      'dataset: mostly TypeScript with a small mixed tail (see the per-language',
+      'rows and each case `source`, which records commit SHA, file, and language).',
+      'Horizon is single-next-edit — the first hunk of the file diff from the',
+      'pre-image prefix — with a full-file prefix, not a truncated window. A pass',
+      'rate of 100% means every mined hunk reconstructs, not that prediction works.',
+      '',
+    );
   } else if (report.inputSource === 'synthetic') {
     lines.push(
       '**These numbers measure the applier, not any model.** Every case in this suite',
@@ -158,6 +178,32 @@ function limitations(report: BenchReport): string[] {
       'below, and no container digest exists. Pass rates do not depend on either.',
       '',
     );
+  } else if (report.suite === 'nep-bench') {
+    lines.push(
+      `**Coverage is ${report.totals.cases} hunks mined from Adze history, not a sample of anything.**`,
+      'A pass rate of 100% means every mined hunk reconstructs byte-identically,',
+      'not that the applier predicts edits or is correct. The set is capped for',
+      'hand review (see `bench/suites/nep-bench/README.md` for the miner filters',
+      'and the two multi-hunk intermediates it excludes); it grows by mining more',
+      'history, not by encoding failures.',
+      '',
+      '**Per-language rows are reconstruction by file language, not per-model skill.**',
+      'Each result carries the language detected from its path — the same value',
+      'the validator saw — and the Case results table below has the per-case',
+      'language. A model loop with pinned snapshots and at least three attempts',
+      'per case does not exist yet; until it does there is no confidence interval',
+      'to report, for the same zero-variance reason stated above.',
+      '',
+      '**The structural validator is not a parser.** With no tree-sitter grammars',
+      'present, validation is a delimiter-and-indentation check. The `byValidator`',
+      'table below reports which level actually ran for each case, and a case validated',
+      'by `none` was not checked at all.',
+      '',
+      '**Not comparable across machines as a latency measurement.** Durations are',
+      'included for orientation only. No resource band is pinned, no container digest',
+      'exists, and pass rates in this suite do not depend on either.',
+      '',
+    );
   } else {
     lines.push(
       '**Coverage is what someone thought to write down.** A pass rate of 100% means',
@@ -177,6 +223,90 @@ function limitations(report: BenchReport): string[] {
   }
 
   return lines;
+}
+
+/**
+ * The severe-failure section: a case that applied when it should have been
+ * refused is the corruption class, and it must not sit below a table.
+ * Retrieval has no refusal semantics, so the section is stated as inapplicable
+ * for index-bench rather than printed as an applier claim. The nep-bench v0
+ * set is output-only by construction, so an empty severe list there is
+ * unexercised rather than covered, and says so.
+ */
+function severeSection(report: BenchReport): string[] {
+  if (report.suite === 'index-bench') {
+    return [
+      '## Severe failures — not applicable',
+      '',
+      'Retrieval has no refusal semantics: a query that finds nothing is a miss,',
+      'reported as `wrong-output` in Negative results below, not as a refusal.',
+      'This section tracks the applier corruption class and does not apply here.',
+      '',
+    ];
+  }
+  const severe = report.severeFailures;
+  if (severe.length > 0) {
+    return [
+      '## Severe failures — applied when a refusal was required',
+      '',
+      `**${severe.length} case(s) applied an edit that should have been refused.**`,
+      '',
+      ...severe.map(caseLine),
+      '',
+    ];
+  }
+  if (report.suite === 'nep-bench') {
+    return [
+      '## Severe failures — applied when a refusal was required',
+      '',
+      'None in this run — but the v0 set is output-only by construction',
+      '(the miner emits only `output` expectations), so this class is',
+      'unexercised rather than covered. A mined refusal case — a hunk',
+      'the applier must decline — does not exist yet.',
+      '',
+    ];
+  }
+  return [
+    '## Severe failures — applied when a refusal was required',
+    '',
+    'None. Every case that asserts a refusal was refused.',
+    '',
+    'This is the line to read first in this report. A case here means the applier',
+    'wrote a file it was supposed to decline, which is the failure users actually',
+    'feel.',
+    '',
+  ];
+}
+
+/** The paragraph above the breakdown tables, per suite. */
+function breakdownsIntro(report: BenchReport): string[] {
+  if (report.suite === 'index-bench') {
+    return [
+      'The tier, strategy, and validator tables track the applier and are empty for',
+      'a retrieval run by design — index results record no applier telemetry rather',
+      'than zeros. Per-query precision and latency are in Case results and',
+      '`trajectories/`.',
+      '',
+    ];
+  }
+  if (report.suite === 'nep-bench') {
+    return [
+      'Per tier, per strategy, and per tag — the `typescript`, `javascript`,',
+      '`json`, `markdown`, and `yaml` tag rows are the per-language',
+      'reconstruction breakdown (each case is tagged with its mined language).',
+      'Aggregated over time and across input sources, the tier half is the',
+      '"apply success rate per model per tier" metric from',
+      '`docs/benchmarks/strategy.md`. For this run the input source is stated',
+      'in Limitations above: there is no model in it.',
+      '',
+    ];
+  }
+  return [
+    'Per tier and per strategy. Aggregated over time and across input sources, this is',
+    'the "apply success rate per model per tier" metric from `docs/benchmarks/strategy.md`.',
+    'For this run the input source is stated in Limitations above.',
+    '',
+  ];
 }
 
 export function renderReportMarkdown(report: BenchReport): string {
@@ -210,41 +340,9 @@ export function renderReportMarkdown(report: BenchReport): string {
       : []),
   ]);
 
-  // Before the ordinary breakdowns: a case that applied when it should have been
-  // refused is the corruption class, and it must not sit below a table.
-  // Retrieval has no refusal semantics, so the section is stated as inapplicable
-  // for index-bench rather than printed as an applier claim.
-  const severe = report.severeFailures;
-  sections.push(
-    report.suite === 'index-bench'
-      ? [
-          '## Severe failures — not applicable',
-          '',
-          'Retrieval has no refusal semantics: a query that finds nothing is a miss,',
-          'reported as `wrong-output` in Negative results below, not as a refusal.',
-          'This section tracks the applier corruption class and does not apply here.',
-          '',
-        ]
-      : [
-          '## Severe failures — applied when a refusal was required',
-          '',
-          ...(severe.length === 0
-            ? [
-                'None. Every case that asserts a refusal was refused.',
-                '',
-                'This is the line to read first in this report. A case here means the applier',
-                'wrote a file it was supposed to decline, which is the failure users actually',
-                'feel.',
-                '',
-              ]
-            : [
-                `**${severe.length} case(s) applied an edit that should have been refused.**`,
-                '',
-                ...severe.map(caseLine),
-                '',
-              ]),
-        ],
-  );
+  // Before the ordinary breakdowns. The helper keeps this function under the
+  // complexity ceiling; the section itself is the line to read first.
+  sections.push(severeSection(report));
 
   if (
     report.metrics !== undefined ||
@@ -285,20 +383,7 @@ export function renderReportMarkdown(report: BenchReport): string {
   sections.push([
     '## Breakdowns',
     '',
-    ...(report.suite === 'index-bench'
-      ? [
-          'The tier, strategy, and validator tables track the applier and are empty for',
-          'a retrieval run by design — index results record no applier telemetry rather',
-          'than zeros. Per-query precision and latency are in Case results and',
-          '`trajectories/`.',
-          '',
-        ]
-      : [
-          'Per tier and per strategy. Aggregated over time and across input sources, this is',
-          'the "apply success rate per model per tier" metric from `docs/benchmarks/strategy.md`.',
-          'For this run the input source is stated in Limitations above.',
-          '',
-        ]),
+    ...breakdownsIntro(report),
     ...table('By tier', report.byTier),
     ...table('By match strategy', report.byStrategy),
     ...table('By validator level', report.byValidator),

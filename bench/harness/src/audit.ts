@@ -121,6 +121,30 @@ function brokenTaskAudit(report: BenchReport): string[] {
     ];
   }
 
+  if (report.suite === 'nep-bench') {
+    return [
+      '## Broken-task audit — not applicable, with one mined-set caveat',
+      '',
+      'The policy requires our own broken-task audit of borrowed task sets. This',
+      `suite borrows nothing external: its ${report.totals.cases} cases are hunks`,
+      'mined from Adze history itself (one repo, commit SHA + file + language in',
+      'each case `source`), so there is no upstream author to disagree with and no',
+      'gold patch to verify.',
+      '',
+      '### What stands in for it',
+      '',
+      'Two miner-side filters are the audit surface here, and both are recorded',
+      'rather than asserted: the miner keeps only first-hunk intermediates that',
+      'reproduce exactly by string replacement with a unique search block, and it',
+      'excludes two multi-hunk test intermediates whose first hunk alone does not',
+      'parse (listed in `bench/suites/nep-bench/scripts/mine.mjs` as EXCLUDED_IDS',
+      'with the reason). A re-mined set that drifts in size or language mix is a',
+      'miner change to review, and every trajectory beside this file carries its',
+      'commit SHA so any case can be re-derived by hand.',
+      '',
+    ];
+  }
+
   return [
     '## Broken-task audit — not applicable',
     '',
@@ -183,14 +207,23 @@ function leakageAssertions(report: BenchReport): string[] {
           "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned paths to the query's own expected paths. |",
           '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each query carries its own expected paths. |',
         ]
-      : [
-          '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are hand-written edits held in memory. |',
-          '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
-          '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. The applier is handed file contents, not a checkout. |',
-          '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
-          "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned string to the case's own expectation. |",
-          '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each case carries its own expectation. |',
-        ]),
+      : report.suite === 'nep-bench'
+        ? [
+            '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are mined (prefix, true-edit) pairs loaded from JSON; the true edit is the task, not a leak. |',
+            '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
+            '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. The applier is handed file contents, not a checkout — the commit SHAs in case `source` fields are provenance, not reachable refs. |',
+            '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
+            '| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned string to the mined post-image. |',
+            '| Report names every task-defining test | Not applicable — unimplemented | Test-pass is not measured in v0; `test`-tagged cases name the neighboring test file for the future column. |',
+          ]
+        : [
+            '| Gold-patch fields never reach the prompt | Not applicable — no such input | There is no dataset record and no agent payload. The inputs are hand-written edits held in memory. |',
+            '| Test patch absent from the agent payload | Not applicable — no such input | As above: no payload, because there is no agent. |',
+            '| Future git history unreachable in the agent repository | Not applicable — no such input | No agent repository and no base commit. The applier is handed file contents, not a checkout. |',
+            '| Network egress blocked | Not applicable — unimplemented | No network connection is opened by this suite. |',
+            "| Grading only on the committed diff, in a fresh container | Not applicable — unimplemented | No container is started. Grading compares the returned string to the case's own expectation. |",
+            '| Report names every task-defining test | Not applicable — unimplemented | There are no task-defining tests; each case carries its own expectation. |',
+          ]),
     '',
     '**The three that are implemented.** `checkPromptLeakage` and',
     '`checkHistoryIsolation` in `bench/harness/src/leakage.ts` cover the first three',
@@ -202,7 +235,8 @@ function leakageAssertions(report: BenchReport): string[] {
     'repository with history to pass. Calling them from a run that has none of those',
     'would return clean every time, which would read as enforcement while checking',
     'nothing. They begin to apply with the first adapter that prepares a task',
-    'from a dataset.',
+    'from a dataset. (`nep.ts` is scoring helpers over an already-finished',
+    'report, not a second runner, so the same holds for it.)',
     '',
     '**The other three.** Unimplemented, and properties of a container rather than of',
     'any value this harness can inspect. ADR-0011 assigns the two-container design to',
@@ -294,9 +328,19 @@ function severeFailures(report: BenchReport): string[] {
     return [
       '### Applied when a refusal was required',
       '',
-      'None. Every case that asserts a refusal was refused. This is the corruption class,',
-      'and it is the line in this file worth reading if you read only one.',
-      '',
+      ...(report.suite === 'nep-bench'
+        ? [
+            'None in this run — but the v0 set is output-only by construction (the',
+            'miner emits only `output` expectations), so this class is unexercised',
+            'rather than covered. This is the corruption class, and it is the line',
+            'in this file worth reading if you read only one.',
+            '',
+          ]
+        : [
+            'None. Every case that asserts a refusal was refused. This is the corruption class,',
+            'and it is the line in this file worth reading if you read only one.',
+            '',
+          ]),
     ];
   }
 

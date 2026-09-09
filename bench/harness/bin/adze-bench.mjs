@@ -3,7 +3,7 @@
  * `adze-bench` — the benchmark entry point.
  *
  * Wired to the root scripts `bench:apply`, `bench:polyglot`, `bench:index`,
- * `bench:swe-smoke`, and `bench:list`.
+ * `bench:nep`, `bench:swe-smoke`, and `bench:list`.
  *
  * Argument parsing is hand-rolled rather than using commander, so that `bench/`
  * carries no dependency the product does not already have. Two subcommands and four
@@ -39,13 +39,15 @@ const USAGE = `adze-bench — Adze benchmark runner
 
 Usage:
   adze-bench apply [options]     run an edit-format Tier-1 suite (default: apply-bench)
+  adze-bench nep [options]       run the mined next-edit prototype (nep-bench)
   adze-bench index [options]     run the local retrieval suite (index-bench)
   adze-bench list  [options]     list cases without running them
 
 Options:
   --suite <name>   suite under bench/suites (default: apply-bench for apply/list,
-                   index-bench for index; polyglot-bench and swe-smoke also run
-                   under apply; swe-smoke reports are refused publication)
+                   nep-bench for nep, index-bench for index; polyglot-bench and
+                   swe-smoke also run under apply; swe-smoke reports are refused
+                   publication)
   --filter <text>  only cases whose id, tag, or description contains <text>
   --out <dir>      write the run here (default: bench/.runs/<stamp>-<suite>)
   --no-write       run and print, write nothing
@@ -123,7 +125,17 @@ if (args.command === 'help' || args.command === undefined) {
 
 function defaultSuite(command) {
   if (command === 'index') return 'index-bench';
+  if (command === 'nep') return 'nep-bench';
   return 'apply-bench';
+}
+
+// `nep` is an alias for `apply --suite nep-bench`: the prototype reuses the
+// deterministic edit-format runner (case schema, runSuite shape,
+// limitations-first report) rather than a second runner, so listing and
+// filtering behave identically and there is one fewer code path to audit.
+if (args.command === 'nep') {
+  args.command = 'apply';
+  if (args.suite === undefined) args.suite = 'nep-bench';
 }
 
 const suiteName = args.suite ?? defaultSuite(args.command);
@@ -183,6 +195,11 @@ async function finishRun(outcome, suite) {
     );
   } else {
     process.stdout.write(`${harness.renderConsoleSummary(outcome.report)}\n`);
+    if (outcome.report.suite === 'nep-bench') {
+      // Per-language reconstruction, from the same report the console line
+      // above summarizes — a second view, not a second number.
+      process.stdout.write(`\n${harness.renderNepSummary(harness.summarizeNep(outcome.report))}\n`);
+    }
     if (written !== undefined) {
       process.stdout.write(`\nreport   ${written.reportPath}\n`);
       process.stdout.write(`result   ${written.resultPath}\n`);
@@ -230,6 +247,12 @@ function printCaveat(suite) {
       '\nThis suite measures edit format against hand-written edits sampled from the\n' +
         'Aider Polyglot shape (40 of 225). It is not a measurement of any model,\n' +
         'and its number is not a per-model result.\n',
+    );
+  } else if (suite === 'nep-bench') {
+    process.stdout.write(
+      '\nThis suite reconstructs mined Adze commit hunks with the true edit supplied.\n' +
+        'It measures the applier given the answer, not next-edit prediction and not\n' +
+        'any model. Its number is a wiring signal, not a per-model result.\n',
     );
   } else if (suite === 'index-bench') {
     process.stdout.write(
