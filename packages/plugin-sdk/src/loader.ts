@@ -51,6 +51,7 @@ import {
   type ContextFileSystem,
   type ResolvedContextProvider,
 } from './context.js';
+import { compileGlobSet } from './glob.js';
 import { HookHost, type HookHostOptions, type HookInstance } from './hooks.js';
 import {
   type ContextProviderContribution,
@@ -322,6 +323,11 @@ async function collectHooks(
     }
 
     const timeoutMs = hookTimeoutMs(contribution);
+    const filterCheck = checkHookFilters(manifest.id, contribution, field);
+    if (!filterCheck.ok) {
+      diagnostics.push(...filterCheck.diagnostics);
+      continue;
+    }
     const loaded = await loadGuest(
       manifest.id,
       root,
@@ -345,10 +351,43 @@ async function collectHooks(
       timeoutMs,
       exportName: contribution.export ?? contribution.event,
       guest: loaded.guest,
+      ...(contribution.tools === undefined ? {} : { tools: [...contribution.tools] }),
+      ...(contribution.paths === undefined ? {} : { paths: [...contribution.paths] }),
     });
   }
 
   return { items, diagnostics, notices: [] };
+}
+
+function checkHookFilters(
+  pluginId: string,
+  contribution: {
+    readonly tools?: readonly string[] | undefined;
+    readonly paths?: readonly string[] | undefined;
+  },
+  field: string,
+):
+  | { readonly ok: true }
+  | { readonly ok: false; readonly diagnostics: readonly PluginDiagnostic[] } {
+  const diagnostics: PluginDiagnostic[] = [];
+  for (const [kind, patterns] of [
+    ['tools', contribution.tools],
+    ['paths', contribution.paths],
+  ] as const) {
+    if (patterns === undefined) continue;
+    const compiled = compileGlobSet(patterns);
+    if (!compiled.ok) {
+      diagnostics.push(
+        errorDiagnostic(
+          'manifest-schema',
+          `plugin '${pluginId}' ${field}.${kind} has an invalid glob: ${compiled.messages.join('; ')}. ` +
+            `A filter that cannot be compiled cannot be enforced, so the plugin is refused rather than loaded unfiltered.`,
+          `${field}.${kind}`,
+        ),
+      );
+    }
+  }
+  return diagnostics.length === 0 ? { ok: true } : { ok: false, diagnostics };
 }
 
 /** Surface 2: context providers. `glob` needs no guest; anything else does. */

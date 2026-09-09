@@ -218,6 +218,7 @@ export function toRegisteredHook(options: BridgeOptions): RegisteredHook {
           arguments: context.arguments,
         },
         context.arguments,
+        { toolName: context.name },
       );
       if (toolDecision.kind === 'deny') return denyOutcome(toolDecision);
 
@@ -229,7 +230,10 @@ export function toRegisteredHook(options: BridgeOptions): RegisteredHook {
         const shape = reader(args);
         if (shape !== undefined) {
           const payload = editPrePayload(context, shape, args, approvedByHuman);
-          const editDecision = await host.fireDecision('edit.pre', payload, args);
+          const editDecision = await host.fireDecision('edit.pre', payload, args, {
+            toolName: context.name,
+            path: shape.path,
+          });
           if (editDecision.kind === 'deny') return denyOutcome(editDecision);
           if (editDecision.kind === 'modify') {
             args = editDecision.arguments;
@@ -245,29 +249,36 @@ export function toRegisteredHook(options: BridgeOptions): RegisteredHook {
 
     async toolPost(context: ToolPostContext): Promise<ToolPostOutcome> {
       const original = textOf(context.result.content);
-      const replaced = await host.fireToolPost({
-        sessionId: context.sessionId,
-        turnId: context.turnId,
-        callId: context.callId,
-        name: context.name,
-        ok: context.result.ok,
-        text: original,
-      });
+      const replaced = await host.fireToolPost(
+        {
+          sessionId: context.sessionId,
+          turnId: context.turnId,
+          callId: context.callId,
+          name: context.name,
+          ok: context.result.ok,
+          text: original,
+        },
+        { toolName: context.name },
+      );
 
       const reader = editTools[context.name];
       if (reader !== undefined && host.forEvent('edit.post').length > 0) {
         const path = reader(editArgsFrom(context))?.path;
         if (path !== undefined) {
-          await host.fireNotification('edit.post', {
-            event: 'edit.post',
-            data: {
-              sessionId: context.sessionId,
-              turnId: context.turnId,
-              callId: context.callId,
-              path,
-              ok: context.result.ok,
+          await host.fireNotification(
+            'edit.post',
+            {
+              event: 'edit.post',
+              data: {
+                sessionId: context.sessionId,
+                turnId: context.turnId,
+                callId: context.callId,
+                path,
+                ok: context.result.ok,
+              },
             },
-          });
+            { toolName: context.name, path },
+          );
         }
       }
 

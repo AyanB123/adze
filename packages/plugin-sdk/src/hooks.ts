@@ -60,6 +60,7 @@
  */
 
 import type { ContentBlock, JsonObject, JsonValue } from '@adze/protocol';
+import { compileGlobSet, toPosix } from './glob.js';
 import type { HookEvent, PluginDiagnostic } from './manifest.js';
 import { canVeto, errorDiagnostic, warningDiagnostic } from './manifest.js';
 import { callGuest, type GuestModule } from './wasm.js';
@@ -265,6 +266,17 @@ export type HookRecord =
       readonly pluginId: string;
       readonly event: HookEvent;
       readonly discardedBecause: string;
+    }
+  | {
+      /**
+       * A hook the host did not enter because its manifest `tools`/`paths`
+       * filters did not match. Recorded so a skipped policy is visible in
+       * trajectories rather than silent; never a diagnostic.
+       */
+      readonly kind: 'skipped';
+      readonly pluginId: string;
+      readonly event: HookEvent;
+      readonly reason: string;
     };
 
 /**
@@ -307,6 +319,11 @@ export function consoleHookObserver(): HookObserver {
   return {
     record(record) {
       if (record.kind === 'denied' || record.kind === 'modified') return;
+      // Skips stay out of the terminal: a filtered hook is skipped on nearly
+      // every call, so printing each one would drown the failures this observer
+      // exists to surface. The `skipped` record is retained in `records` (and
+      // therefore in trajectories), which is the debug log for this volume.
+      if (record.kind === 'skipped') return;
       if (record.kind === 'timeout') {
         console.warn(
           `[adze:plugin] hook timeout: '${record.pluginId}' did not answer ${record.event} ` +
@@ -343,6 +360,104 @@ export interface HookInstance {
   readonly timeoutMs: number;
   readonly exportName: string;
   readonly guest: GuestModule;
+  /**
+   * Host-side dispatch filters from the manifest. Absent means no filtering.
+   * Applied before the guest is entered; see {@link HookFilterContext}.
+   */
+  readonly tools?: readonly string[];
+  readonly paths?: readonly string[];
+}
+
+/**
+ * What a hook filter matches against.
+ *
+ * `toolName` is the tool being called (`tool.pre`/`tool.post`), or the
+ * originating tool for derived `edit.pre`/`edit.post`. `path` is the edit path
+ * for edit-shaped calls. Events without a tool or path cannot satisfy a filter
+ * that asks for one, so such a hook is skipped rather than fired.
+ */
+export interface HookFilterContext {
+  readonly toolName?: string;
+  readonly path?: string;
+}
+
+/**
+ * Whether a hook's manifest filters admit this call.
+ *
+ * Both lists are OR within and AND across: a hook with `tools: ["bash"]` fires
+ * only for bash; with a `paths` filter only for a matching path; with both, only
+ * when both match. Matching uses the same glob syntax as context providers so
+ * one mental model covers both, and paths are compared POSIX-style so a manifest
+ * behaves identically on Windows.
+ */
+export function matchesHookFilters(
+  hook: HookInstance,
+  filter: HookFilterContext,
+): { readonly matches: true } | { readonly matches: false; readonly reason: string } {
+  const tools = hook.tools;
+  if (tools !== undefined && tools.length > 0) {
+    const name = filter.toolName;
+    if (name === undefined) {
+      return {
+        matches: false,
+        reason: `declares a tools filter but this ${hook.event} call carries no tool name`,
+      };
+    }
+    const compiled = compileGlobSet(tools);
+    // Invalid globs are rejected at load; a compile failure here means the hook
+    // was constructed by hand. Refuse to fire rather than firing unfiltered.
+    if (!compiled.ok) {
+      return {
+        matches: false,
+        reason: `has an invalid tools filter (${compiled.messages.join('; ')})`,
+      };
+    }
+    if (!compiled.matches(name)) {
+      return { matches: false, reason: `tool '${name}' is outside its tools filter` };
+    }
+  }
+
+  const paths = hook.paths;
+  if (paths !== undefined && paths.length > 0) {
+    const candidate = filter.path;
+    if (candidate === undefined) {
+      return {
+        matches: false,
+        reason: `declares a paths filter but this ${hook.event} call carries no path`,
+      };
+    }
+    const compiled = compileGlobSet(paths);
+    if (!compiled.ok) {
+      return {
+        matches: false,
+        reason: `has an invalid paths filter (${compiled.messages.join('; ')})`,
+      };
+    }
+    if (!compiled.matches(toPosix(candidate))) {
+      return { matches: false, reason: `path '${candidate}' is outside its paths filter` };
+    }
+  }
+
+  return { matches: true };
+}
+
+function defaultDecisionFilter(
+  event: 'tool.pre' | 'edit.pre',
+  payload: ToolPrePayload | EditPrePayload,
+): HookFilterContext {
+  if (event === 'tool.pre') {
+    const data = payload as ToolPrePayload;
+    return { toolName: data.name };
+  }
+  const data = payload as EditPrePayload;
+  return { path: data.path };
+}
+
+function defaultNotificationFilter(payload: HookPayload): HookFilterContext {
+  if (payload.event === 'edit.post') {
+    return { path: payload.data.path };
+  }
+  return {};
 }
 
 export interface HookHostOptions {
@@ -407,19 +522,35 @@ export class HookHost {
    * First denial wins and short-circuits. Modifications chain: each hook sees the
    * arguments the previous one produced, which is what lets a normalizing hook and
    * a policy hook compose without knowing about each other.
+   *
+   * Host-side `tools`/`paths` filters run before the guest is entered. A hook
+   * whose filters do not match is skipped and recorded as `skipped`, never as an
+   * error: skipping is the filter working, not the hook failing.
    */
   async fireDecision(
     event: 'tool.pre' | 'edit.pre',
     payload: ToolPrePayload | EditPrePayload,
     currentArguments: JsonObject,
+    filter?: HookFilterContext,
   ): Promise<HookDecision> {
     const hooks = this.forEvent(event);
     if (hooks.length === 0) return { kind: 'allow' };
+    const context = filter ?? defaultDecisionFilter(event, payload);
 
     let args = currentArguments;
     const modifiedBy: string[] = [];
 
     for (const hook of hooks) {
+      const gated = matchesHookFilters(hook, context);
+      if (!gated.matches) {
+        this.observer.record({
+          kind: 'skipped',
+          pluginId: hook.pluginId,
+          event,
+          reason: gated.reason,
+        });
+        continue;
+      }
       const output = await this.invoke(hook, toJson(event, payload, args));
 
       if (output.kind === 'failure') {
@@ -486,9 +617,20 @@ export class HookHost {
   async fireInjection(
     event: 'session.start' | 'session.turnStart' | 'context.pre' | 'session.compact',
     payload: HookPayload,
+    filter: HookFilterContext = {},
   ): Promise<readonly ContentBlock[]> {
     const blocks: ContentBlock[] = [];
     for (const hook of this.forEvent(event)) {
+      const gated = matchesHookFilters(hook, filter);
+      if (!gated.matches) {
+        this.observer.record({
+          kind: 'skipped',
+          pluginId: hook.pluginId,
+          event,
+          reason: gated.reason,
+        });
+        continue;
+      }
       const output = await this.invoke(hook, payloadJson(payload));
       if (output.kind === 'failure') continue;
       const value = output.value;
@@ -508,9 +650,20 @@ export class HookHost {
   }
 
   /** Fire `tool.post` and resolve the final text. Last replacement wins. */
-  async fireToolPost(payload: ToolPostPayload): Promise<string> {
+  async fireToolPost(payload: ToolPostPayload, filter?: HookFilterContext): Promise<string> {
     let text = payload.text;
+    const context = filter ?? { toolName: payload.name };
     for (const hook of this.forEvent('tool.post')) {
+      const gated = matchesHookFilters(hook, context);
+      if (!gated.matches) {
+        this.observer.record({
+          kind: 'skipped',
+          pluginId: hook.pluginId,
+          event: 'tool.post',
+          reason: gated.reason,
+        });
+        continue;
+      }
       const output = await this.invoke(
         hook,
         payloadJson({ event: 'tool.post', data: { ...payload, text } }),
@@ -535,8 +688,20 @@ export class HookHost {
   async fireNotification(
     event: 'edit.post' | 'session.turnEnd',
     payload: HookPayload,
+    filter?: HookFilterContext,
   ): Promise<void> {
+    const context = filter ?? defaultNotificationFilter(payload);
     for (const hook of this.forEvent(event)) {
+      const gated = matchesHookFilters(hook, context);
+      if (!gated.matches) {
+        this.observer.record({
+          kind: 'skipped',
+          pluginId: hook.pluginId,
+          event,
+          reason: gated.reason,
+        });
+        continue;
+      }
       await this.invoke(hook, payloadJson(payload));
     }
   }

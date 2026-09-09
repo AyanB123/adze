@@ -198,6 +198,17 @@ const HookContributionSchema = z.object({
   timeoutMs: z.number().int().positive().max(MAX_HOOK_TIMEOUT_MS).optional(),
   /** Exported function name, for a module that offers more than one hook. */
   export: z.string().min(1).optional(),
+  /**
+   * Host-side dispatch filters, applied before the guest is entered.
+   *
+   * `tools` matches the tool name (for `tool.pre`/`tool.post`, and for `edit.pre`/
+   * `edit.post` the originating tool). `paths` matches the edit path with the same
+   * glob syntax as context providers. Both are OR within the list and AND across
+   * the two fields: a hook with both fires only when both match. Absent means no
+   * filtering. An invalid glob is a load error, never a silent skip.
+   */
+  tools: z.array(z.string().min(1)).min(1).optional(),
+  paths: z.array(z.string().min(1)).min(1).optional(),
 });
 
 /**
