@@ -148,6 +148,10 @@ importers:
         version: 7.0.2
 
   packages/apply:
+    dependencies:
+      web-tree-sitter:
+        specifier: 'catalog:'
+        version: 0.26.13
     devDependencies:
       '@types/node':
         specifier: 'catalog:'

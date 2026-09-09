@@ -23,7 +23,7 @@ import type {
   MatchLocation,
   ValidationResult,
 } from './types.js';
-import { detectLanguage, validate } from './validate.js';
+import { detectLanguage, validateAsync } from './validate.js';
 
 const DEFAULT_TIERS: readonly ApplyTier[] = ['search-replace', 'whole-file'];
 const DEFAULT_MAX_WHOLE_FILE_BYTES = 256 * 1024;
@@ -266,10 +266,12 @@ export async function applyEdit(
     }
 
     // A fast-apply model is still a model, so its output is untrusted and gets
-    // validated exactly like Tier 1's.
+    // validated exactly like Tier 1's. The async entry prefers a real parse when
+    // grammars are available and falls back to the structural checker otherwise,
+    // so `telemetry.validation.validator` reports whichever level actually ran.
     const validation = options.skipValidation
       ? SKIPPED_VALIDATION
-      : validate(outcome.attempt.content, language);
+      : await validateAsync(outcome.attempt.content, language, options.grammarOptions ?? {});
     lastValidation = validation;
 
     if (!validation.ok) {

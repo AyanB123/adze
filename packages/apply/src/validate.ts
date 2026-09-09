@@ -17,6 +17,7 @@
  * mismatched brackets, and lost indentation.
  */
 
+import { type GrammarOptions, validateTreeSitter } from './tree-sitter.js';
 import type { ValidationResult } from './types.js';
 
 type Family = 'c-like' | 'python' | 'json' | 'unknown';
@@ -385,13 +386,33 @@ function checkIndentationCoherence(content: string): ValidationResult | undefine
 }
 
 /**
- * Validate content, preferring a real parse when grammars are available.
+ * Synchronous validation: the structural checker only, always available.
  *
- * The tree-sitter path is wired in a follow-up (M1); until then this returns the
- * structural result, and `ValidationResult.validator` tells callers and
- * benchmark reports which level actually ran. We report the level rather than
- * implying a parse we did not perform.
+ * `ValidationResult.validator` tells callers and benchmark reports which level
+ * actually ran. We report the level rather than implying a parse we did not
+ * perform — so this never reports `tree-sitter`. Async callers that can await a
+ * real parse want `validateAsync`.
  */
 export function validate(content: string, language: string): ValidationResult {
+  return validateStructure(content, language);
+}
+
+/**
+ * Validate content, preferring a real parse when grammars are available.
+ *
+ * Tries tree-sitter first when apply has a grammar mapping for `language` and a
+ * compiled grammar resolves from the configured directory. Falls back to
+ * `validateStructure` when there is no mapping, no file, or the parse itself
+ * fails — so `tree-sitter` is returned only when a parse actually completed. No
+ * grammar means `structural`; an unknown language means `none`, exactly as the
+ * synchronous path reports.
+ */
+export async function validateAsync(
+  content: string,
+  language: string,
+  options: GrammarOptions = {},
+): Promise<ValidationResult> {
+  const parsed = await validateTreeSitter(content, language, options);
+  if (parsed !== undefined) return parsed;
   return validateStructure(content, language);
 }

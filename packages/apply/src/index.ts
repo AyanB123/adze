@@ -30,6 +30,7 @@
 export { applyEdit, applySearchReplace } from './applier.js';
 export type { FindResult, RawMatch } from './match.js';
 export { findMatch, indexLines, reindentReplacement } from './match.js';
+export type { GrammarOptions } from './tree-sitter.js';
 export type {
   ApplyFailureReason,
   ApplyOptions,
@@ -43,4 +44,4 @@ export type {
   MatchStrategy,
   ValidationResult,
 } from './types.js';
-export { detectLanguage, validate, validateStructure } from './validate.js';
+export { detectLanguage, validate, validateAsync, validateStructure } from './validate.js';

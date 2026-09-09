@@ -4,6 +4,8 @@
  * Design rationale: docs/architecture/adr/0005-edit-application.md
  */
 
+import type { GrammarOptions } from './tree-sitter.js';
+
 /** Which tier produced a result. Tiers escalate in cost, not in looseness. */
 export type ApplyTier = 'search-replace' | 'whole-file' | 'fast-apply';
 
@@ -147,6 +149,16 @@ export interface ApplyOptions {
    * "the agent made a mistake" and "the agent broke my build".
    */
   readonly skipValidation?: boolean;
+  /**
+   * Where tree-sitter grammars resolve from: an explicit `directory`, explicit
+   * per-language `files`, else `$ADZE_GRAMMAR_DIR`, else `<root>/.adze/grammars`
+   * — the same convention `@adze/retrieval` follows. Omit when the caller has
+   * no workspace to resolve against; validation then tries the environment and
+   * the current working directory before falling back to the structural
+   * checker. When no grammar is available the validator honestly reports
+   * `structural`, never `tree-sitter`.
+   */
+  readonly grammarOptions?: GrammarOptions;
   /** Override language detection, which is normally inferred from `path`. */
   readonly language?: string;
 }
