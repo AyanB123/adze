@@ -1,0 +1,20 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.ops-runbook",
+  "version": "0.1.0",
+  "displayName": "Ops Runbook",
+  "description": "Deploy and rollback checklists with a read-only reviewer that audits an operations plan before it runs.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "commands": [
+      { "path": "commands/deploy-checklist.md" },
+      { "path": "commands/rollback-plan.md" }
+    ],
+    "agents": [{ "path": "agents/ops-reviewer.md" }]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.narrow-scope",
+  "version": "0.1.0",
+  "displayName": "Narrow Scope",
+  "description": "Keeps work in small reviewable phases with one concern per commit, and audits a diff for bundled changes.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "commands": [{ "path": "commands/plan-small.md" }, { "path": "commands/split-commit.md" }],
+    "agents": [{ "path": "agents/scope-auditor.md" }]
+  },
+  "permissions": {
+    "filesystem": "read"
+  }
+}
