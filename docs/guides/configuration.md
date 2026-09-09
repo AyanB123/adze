@@ -152,12 +152,15 @@ depends on whether anything is *containing* it.
 
 When the broker reports OS-level enforcement, `on-request` lets commands run — the
 sandbox is what would stop them. When it reports `gate-only`, the gate is all there
-is, so the command is prompted. **Every platform reports `gate-only` today**, because
-the CLI builds a `NodeSubprocessBroker` from `@adze/core` and that broker never
-reports OS-level containment. You can confirm it on your own machine:
+is, so the command is prompted. **Windows always reports `gate-only`** — there is
+no mature open-source containment option to wire — and so does any macOS or Linux
+host whose mechanism is missing or unusable (no `sandbox-exec` on `PATH`, no
+usable `bwrap`). On a macOS or Linux host with a usable mechanism, `on-request`
+lets commands run inside the boundary instead of prompting. You can confirm what
+your own machine reports:
 
 ```console
-$ adze doctor --json
+$ adze doctor --json        # on Windows
 ...
   "sandbox": {
     "defaultMode": "workspace-write",
@@ -240,8 +243,13 @@ the turn is **refused rather than run**:
 
 ```console
 $ adze run --max-spend 0.5 --sandbox read-only --approval never "hi"
-ollama/qwen3-coder:30b · read-only · approvals: never
-warning [no-os-sandbox] broker 'node-subprocess' provides no OS-level containment on win32. ...
+ollama/qwen3-coder:30b · read-only · approvals: never · containment: gate-only, no Windows mechanism (taskkill teardown only)
+not enforced [windows-no-restricted-token] no restricted token is applied: CreateRestrictedToken and CreateProcessAsUser have no Node binding, so the command runs with the full rights of the current user
+not enforced [windows-no-job-object] no job object bounds the command: CPU, memory, handle and breakaway limits are not applied; descendants are killed on timeout with taskkill, which bounds lifetime only
+not enforced [windows-no-appcontainer] no AppContainer profile isolates the command: it needs STARTUPINFOEX security capabilities that Node cannot pass, so there is no filesystem or network isolation
+not enforced [network-unrestricted] sandbox mode 'read-only' denies network access, but 'windows-partial' cannot restrict it, so the command reaches the network unimpeded
+not enforced [no-os-containment] sandbox mode 'read-only' has no OS-level filesystem containment via 'windows-partial': an approved command is not confined once it runs
+warning [no-os-sandbox] broker 'windows-partial' provides no OS-level containment on win32. ...
 
 adze: budget.maxSpendUsd was set but provider 'ollama (openai-compatible)' has no prices for model 'qwen3-coder:30b', so the budget could not be enforced. Configure prices or remove the spend budget.
 ```

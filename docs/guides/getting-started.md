@@ -10,23 +10,25 @@ Where something does not work yet, this guide says so and names the milestone in
 [the roadmap](../roadmap.md) instead of describing it as working.
 
 > [!WARNING]
-> **There is no OS-level sandbox containment. Not on Windows, and not on macOS or
-> Linux either.**
+> **On Windows there is no OS-level sandbox containment. On macOS and Linux,
+> there is — where the mechanism is usable.**
 >
-> Adze has a permission gate that every tool call passes through, and it works. What
-> does not exist is a layer *underneath* it that confines a command once the gate has
-> allowed it. When the agent runs `rm -rf build` and you approve it, that command
-> runs with your user's full privileges against your whole filesystem.
+> Adze has a permission gate that every tool call passes through, and it works.
+> Underneath it, the CLI wires the `@adze/sandbox` brokers (Seatbelt for macOS,
+> bubblewrap for Linux, opt-in Docker) into `run`, `chat`, and `doctor`, so on a
+> macOS or Linux host with a usable mechanism an approved command still runs
+> confined to the writable roots. Every containment claim below is read from the
+> plan the selected broker reports — `adze doctor` prints the boundary in force
+> on the current machine rather than a statement about the platform.
 >
-> `packages/sandbox` now contains per-OS broker implementations (Seatbelt for macOS,
-> bubblewrap for Linux, Docker, and a Windows attempt), but **no surface wires them
-> up**: the CLI builds a `NodeSubprocessBroker` from `@adze/core`, and that broker
-> never reports OS-level enforcement. On Windows there is no mature open-source
-> option to wire even in principle, which is a gap across the entire open-source
-> agent ecosystem rather than an Adze-specific one.
+> On Windows there is no mature open-source option to wire even in principle,
+> which is a gap across the entire open-source agent ecosystem rather than an
+> Adze-specific one. There, when the agent runs `rm -rf build` and you approve
+> it, that command runs with your user's full privileges against your whole
+> filesystem.
 >
-> Treat every approval as equivalent to typing the command yourself. If you want to
-> try Adze without that exposure, read
+> Treat every approval on a host without containment as equivalent to typing the
+> command yourself. If you want to try Adze without that exposure, read
 > [local-testing.md](local-testing.md) first — it sets up a launcher with
 > restrictive defaults that refuses to run outside a git repository.
 >
@@ -43,7 +45,9 @@ discovered later.
   the first number so it could not be bent to fit one. There is no number. Any
   comparison you have seen between Adze and another tool did not come from this
   project.
-- **No OS-level sandbox on any platform.** See the warning above and
+- **No OS-level sandbox on Windows, or on any host without a usable mechanism.**
+  macOS with `sandbox-exec` and Linux with usable bubblewrap get `os-level`
+  containment; everything else is `gate-only`. See the warning above and
   [ADR-0007](../architecture/adr/0007-sandbox-and-permissions.md).
 - **No live end-to-end `adze run` against a real model has been witnessed.** The code
   path is exercised and its failure handling is tested — this guide includes a real
@@ -159,7 +163,16 @@ Model providers
 Sandbox
   default mode           workspace-write
   default approvals      on-request
-  OS containment         none on this platform
+  mechanism              no Windows mechanism (taskkill teardown only)
+  OS containment         gate-only — no OS-level containment on this host
+  network                unrestricted — not enforced
+
+  Not enforced (5)
+  gap  [windows-no-restricted-token] no restricted token is applied: CreateRestrictedToken and CreateProcessAsUser have no Node binding, so the command runs with the full rights of the current user
+  gap  [windows-no-job-object] no job object bounds the command: CPU, memory, handle and breakaway limits are not applied; descendants are killed on timeout with taskkill, which bounds lifetime only
+  gap  [windows-no-appcontainer] no AppContainer profile isolates the command: it needs STARTUPINFOEX security capabilities that Node cannot pass, so there is no filesystem or network isolation
+  gap  [network-unrestricted] sandbox mode 'workspace-write' denies network access, but 'windows-partial' cannot restrict it, so the command reaches the network unimpeded
+  gap  [no-os-containment] sandbox mode 'workspace-write' has no OS-level filesystem containment via 'windows-partial': an approved command is not confined once it runs
 
   There is no OS-level sandbox on Windows. The permission gate and the
   approval policy still apply, and every tool call still passes through them —
@@ -170,6 +183,12 @@ Sandbox
   This is a gap across the whole open-source agent ecosystem, not only Adze.
   Closing it is roadmapped: docs/architecture/adr/0007-sandbox-and-permissions.md
 ```
+
+Every claim in that section comes from the containment plan the CLI will hand
+the permission gate — the same call `run` and `chat` make — so `doctor` reports
+the boundary in force on this machine rather than a statement about the
+platform. On macOS with `sandbox-exec` or Linux with usable bubblewrap the same
+section reports `os-level` via that mechanism instead.
 
 The `shell` warning above is the real state of the machine this guide was written on,
 and it is worth understanding rather than skipping: with `bash` broken, the agent can
@@ -320,8 +339,13 @@ actually running — the most likely first-run failure, and worth recognising:
 ```console
 $ node <repo>/packages/cli/bin/adze.mjs run --sandbox read-only --approval never \
     --max-steps 2 --max-time 25 "say hello"
-ollama/qwen3-coder:30b · read-only · approvals: never
-warning [no-os-sandbox] broker 'node-subprocess' provides no OS-level containment on win32. The permission gate and approval policy still apply, but an approved command runs unconfined.
+ollama/qwen3-coder:30b · read-only · approvals: never · containment: gate-only, no Windows mechanism (taskkill teardown only)
+not enforced [windows-no-restricted-token] no restricted token is applied: CreateRestrictedToken and CreateProcessAsUser have no Node binding, so the command runs with the full rights of the current user
+not enforced [windows-no-job-object] no job object bounds the command: CPU, memory, handle and breakaway limits are not applied; descendants are killed on timeout with taskkill, which bounds lifetime only
+not enforced [windows-no-appcontainer] no AppContainer profile isolates the command: it needs STARTUPINFOEX security capabilities that Node cannot pass, so there is no filesystem or network isolation
+not enforced [network-unrestricted] sandbox mode 'read-only' denies network access, but 'windows-partial' cannot restrict it, so the command reaches the network unimpeded
+not enforced [no-os-containment] sandbox mode 'read-only' has no OS-level filesystem containment via 'windows-partial': an approved command is not confined once it runs
+warning [no-os-sandbox] broker 'windows-partial' provides no OS-level containment on win32. The permission gate and approval policy still apply, but an approved command runs unconfined.
 
 warning [no-os-sandbox] sandbox mode 'read-only' is enforced by the permission gate only: there is no OS-level containment on this platform, so a command that is approved is not confined once it runs
   docs/architecture/adr/0007-sandbox-and-permissions.md
@@ -349,9 +373,11 @@ Cost
   Add them to packages/providers/src/catalog.json — it is data, not code.
 ```
 
-Two things to take from that output beyond the error. **The sandbox warning is
-printed before the turn, not after** — a user about to approve a command needs that
-fact before deciding. And **the summary is printed even on failure**, with the token
+Two things to take from that output beyond the error. **The containment report is
+printed before the turn, not after** — the `containment:` line, every `not
+enforced` gap, and the warnings: a user about to approve a command needs to know
+nothing will confine it *before* deciding. And **the summary is printed even on
+failure**, with the token
 split and cache hit rate, because cache economics move effective cost by more than
 10× and a summary that omitted them would not be usable for cost reasoning.
 
@@ -391,8 +417,13 @@ Five slash commands, verified against the running binary:
 ```console
 $ node <repo>/packages/cli/bin/adze.mjs chat
 adze chat — ollama/qwen3-coder:30b
-workspace-write · approvals: on-request · /help for commands
-warning [no-os-sandbox] broker 'node-subprocess' provides no OS-level containment on win32. ...
+workspace-write · approvals: on-request · containment: gate-only, no Windows mechanism (taskkill teardown only) · /help for commands
+not enforced [windows-no-restricted-token] no restricted token is applied: CreateRestrictedToken and CreateProcessAsUser have no Node binding, so the command runs with the full rights of the current user
+not enforced [windows-no-job-object] no job object bounds the command: CPU, memory, handle and breakaway limits are not applied; descendants are killed on timeout with taskkill, which bounds lifetime only
+not enforced [windows-no-appcontainer] no AppContainer profile isolates the command: it needs STARTUPINFOEX security capabilities that Node cannot pass, so there is no filesystem or network isolation
+not enforced [network-unrestricted] sandbox mode 'workspace-write' denies network access, but 'windows-partial' cannot restrict it, so the command reaches the network unimpeded
+not enforced [no-os-containment] sandbox mode 'workspace-write' has no OS-level filesystem containment via 'windows-partial': an approved command is not confined once it runs
+warning [no-os-sandbox] broker 'windows-partial' provides no OS-level containment on win32. The permission gate and approval policy still apply, but an approved command runs unconfined.
 
   /usage    tokens, cost, and cache hit rate for this session
   /model    the model and its capabilities

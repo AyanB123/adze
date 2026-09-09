@@ -20,10 +20,13 @@ work yet, the guide says so and names the milestone in
 
 ## Two things to know before you start
 
-**There is no OS-level sandbox containment on any platform.** Not Windows, and not
-macOS or Linux either. The permission gate is the only enforcement that exists, and it
-decides *whether* a command runs — nothing constrains what it touches once it does.
-Treat an approval as equivalent to running the command yourself.
+**OS-level sandbox containment holds on macOS and Linux, and not on Windows.**
+Where the CLI wires a usable Seatbelt or bubblewrap broker, an approved command
+runs confined to the writable roots with network denied; where it cannot — on
+Windows, which has no mature open-source containment option — the permission gate
+is the only enforcement that exists, and it decides *whether* a command runs.
+`adze doctor` reports which boundary the current machine gets. Treat an approval
+on a host without containment as equivalent to running the command yourself.
 [ADR-0007](../architecture/adr/0007-sandbox-and-permissions.md).
 
 **No benchmark result has been published.** The harness and the

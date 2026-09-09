@@ -139,7 +139,10 @@ The `false` values are roadmap items reporting themselves as absent, not bugs.
 `retrieval` is `false` because no backend was passed — supply one from
 `@adze/retrieval` and `glob`, `grep`, and `symbols` become available; omit it and they
 report themselves unavailable rather than silently doing nothing. `mcpClient` and
-`mcpServer` are milestone M2. `osSandbox` is `false` on every platform today.
+`mcpServer` are milestone M2. `osSandbox` is `false` for SDK-built surfaces on
+every platform: the SDK does not wire `@adze/sandbox` — only the CLI does that
+today — so only the CLI reports `os-level`. An SDK surface that wants containment
+wires a broker from `@adze/sandbox` itself, the way `packages/cli` does.
 
 Note the last two lines. **Render `session.sandbox` and `session.approvals`, not your
 own request.** A session may narrow what you asked for, and displaying the request
@@ -313,8 +316,10 @@ model context, tool arguments, or trajectory logs.
 
 Before you drop `commandExecution: 'disabled'`, read your own `decide()`. The
 example's denies everything. Returning `allow-once` lets the model run the command it
-asked for, and with no OS sandbox on any platform, an approval is equivalent to
-running that command yourself.
+asked for, and with no OS sandbox wired into an SDK-built surface, an approval is
+equivalent to running that command yourself. (The CLI wires the Seatbelt and
+bubblewrap brokers on macOS and Linux; `adze doctor` reports the boundary in force
+on the current machine.)
 
 ## Usage and cost
 
