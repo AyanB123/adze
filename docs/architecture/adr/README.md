@@ -25,6 +25,14 @@ nobody — including the author — will remember whether an option was consider
 | [0012](0012-licensing-and-governance.md) | Apache-2.0, DCO, no open-core split | Accepted |
 | [0013](0013-command-rules-match-requested-command.md) | Command rules match the requested command, not the executed argv | Accepted |
 
+## Sources
+
+The evidence behind these decisions — audits, leaderboards, project histories,
+vendor documentation — is catalogued in
+[BIBLIOGRAPHY.md](BIBLIOGRAPHY.md), which names what can be followed and says
+plainly where an ADR cites an unnamed study. New ADRs cite sources by name and
+add them there.
+
 ## Statuses
 
 `Proposed` → under discussion · `Accepted` → in force · `Superseded by NNNN` →
