@@ -113,6 +113,7 @@ export type {
   EditPostPayload,
   EditPrePayload,
   HookDecision,
+  HookFilterContext,
   HookHostOptions,
   HookInstance,
   HookObserver,
@@ -131,6 +132,7 @@ export {
   consoleHookObserver,
   decodeHookOutput,
   HookHost,
+  matchesHookFilters,
   recordingObserver,
 } from './hooks.js';
 // --- Loading ----------------------------------------------------------------
@@ -187,6 +189,9 @@ export {
   VETO_EVENTS,
   warningDiagnostic,
 } from './manifest.js';
+// --- Cross-plugin registries --------------------------------------------------
+export type { AgentRegistry, CommandRegistry } from './registry.js';
+export { buildAgentRegistry, buildCommandRegistry } from './registry.js';
 // --- Semver -----------------------------------------------------------------
 export type { RangeCheckOutcome, SemanticVersion, VersionParseOutcome } from './semver.js';
 export { compareVersions, parseVersion, satisfiesRange } from './semver.js';
