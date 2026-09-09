@@ -30,6 +30,9 @@
  * CI runs the real thing on the macOS and Ubuntu runners.
  */
 
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import type { SandboxMode } from '@adze/protocol';
 import type { ResolveOptions } from '@adze/providers';
 import type {
@@ -302,29 +305,35 @@ describe('adze chat reports the plan before the first prompt', () => {
     // Drives the shipped path: no `containment` hook, so this is the broker a user gets.
     // `chat` rather than `run` because an ended reader leaves the REPL before any model
     // request, which makes the preamble observable with no network at all.
+    // `cwd` isolates session persistence to a temp dir: without it this test would
+    // write `.adze/sessions/*.jsonl` into the repository checkout.
     const io = capture();
+    const workspace = await mkdtemp(join(tmpdir(), 'adze-chat-banner-'));
+    try {
+      const code = await runChat(
+        { cwd: workspace, __testHooks: { resolve: localEndpoint(), reader: endedReader() } },
+        io,
+      );
+      const out = io.stdout();
 
-    const code = await runChat(
-      { __testHooks: { resolve: localEndpoint(), reader: endedReader() } },
-      io,
-    );
-    const out = io.stdout();
+      expect(code).toBe(EXIT.Ok);
+      expect(out).toContain('containment:');
+      // The old banner said nothing about containment, and the engine warning beneath it
+      // named `broker 'node-subprocess'`. Neither can appear now.
+      expect(out).not.toContain('node-subprocess');
+      // Whatever the enforcement, the gaps are listed rather than counted.
+      expect(out).toContain('not enforced');
 
-    expect(code).toBe(EXIT.Ok);
-    expect(out).toContain('containment:');
-    // The old banner said nothing about containment, and the engine warning beneath it
-    // named `broker 'node-subprocess'`. Neither can appear now.
-    expect(out).not.toContain('node-subprocess');
-    // Whatever the enforcement, the gaps are listed rather than counted.
-    expect(out).toContain('not enforced');
-
-    if (process.platform === 'win32') {
-      expect(out).toContain('gate-only');
-      expect(out).toContain('windows-no-appcontainer');
-    } else {
-      // On macOS and Linux the answer depends on the host, which is the point: a stripped
-      // PATH or a disabled sysctl means `gate-only`, and the banner says so.
-      expect(out).toMatch(/containment: (os-level|gate-only)/);
+      if (process.platform === 'win32') {
+        expect(out).toContain('gate-only');
+        expect(out).toContain('windows-no-appcontainer');
+      } else {
+        // On macOS and Linux the answer depends on the host, which is the point: a stripped
+        // PATH or a disabled sysctl means `gate-only`, and the banner says so.
+        expect(out).toMatch(/containment: (os-level|gate-only)/);
+      }
+    } finally {
+      await rm(workspace, { recursive: true, force: true });
     }
   });
 });
