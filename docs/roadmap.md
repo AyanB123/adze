@@ -131,7 +131,7 @@ graph LR
 
 ## M0 — Foundation ✅
 
-Repository, license, governance, tooling, architecture, and all twelve ADRs.
+Repository, license, governance, tooling, architecture, and all thirteen ADRs.
 
 Done. The point of writing every architectural decision *before* the code is that
 the decisions are then checkable against evidence rather than reverse-engineered

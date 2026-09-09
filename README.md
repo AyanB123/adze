@@ -227,7 +227,7 @@ Status column reflects committed code, not intent.
 | `apps/ide` | Code-OSS patch series and build pipeline. Not a vendored fork. | ⬜ Empty |
 | `apps/hub` | Plugin registry index and web UI. | ⬜ Empty |
 | `bench` | Evaluation harness, our own benchmark suites, and published reports. | ✅ `apply-bench` only |
-| `docs` | Architecture, ADRs, research digests, guides. | ✅ 12 ADRs |
+| `docs` | Architecture, ADRs, research digests, guides. | ✅ 13 ADRs |
 
 ## Getting started
 
