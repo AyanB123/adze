@@ -1,0 +1,24 @@
+{
+  "$schema": "https://adze.dev/schema/plugin/v0.json",
+  "id": "adze.destructive-guard",
+  "version": "0.1.0",
+  "displayName": "Destructive Guard",
+  "description": "Denies shell commands that delete data or take down shared infrastructure without a human in the loop.",
+  "license": "Apache-2.0",
+  "repository": "https://github.com/AyanB123/adze",
+  "engines": { "adze": ">=0.0.1 <1.0.0" },
+  "contributes": {
+    "hooks": [
+      {
+        "event": "tool.pre",
+        "module": "hooks/guard.mjs",
+        "runtime": "js",
+        "tools": ["bash"],
+        "timeoutMs": 500
+      }
+    ]
+  },
+  "permissions": {
+    "filesystem": "none"
+  }
+}
