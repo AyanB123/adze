@@ -133,6 +133,16 @@
       ],
       "expect": { "kind": "refusal", "reason": "not-found", "tier": "search-replace" },
       "tags": ["refusal", "not-found", "fuzzy-guard", "model-observed"]
+    },
+    {
+      "id": "not-found-fenced-search-block",
+      "description": "Found while authoring the Tier-1.5 edit-format suites: models routinely wrap the search text in fenced code blocks, so the search arrives with ```ts and ``` lines the file does not contain. Stripping them would be guessing — the fence lines are not in the file — so the edit is refused as not-found and the model retries from the failure message.",
+      "path": "src/fenced.ts",
+      "original": ["const a = 1;", ""],
+      "edits": [{ "search": "```ts\nconst a = 1;\n```", "replace": "const a = 2;" }],
+      "expect": { "kind": "refusal", "reason": "not-found", "tier": "search-replace" },
+      "tags": ["refusal", "not-found", "fuzzy-guard", "model-observed"],
+      "source": "Tier-1.5 edit-format work: fenced search blocks from model output"
     }
   ]
 }

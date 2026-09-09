@@ -116,6 +116,27 @@ describe('applyEdit — refusals', () => {
     expect(r.message).toContain('anchored');
   });
 
+  it('refuses a search block wrapped in code fences rather than stripping them', async () => {
+    // Found while authoring the Tier-1.5 edit-format suites: models routinely wrap
+    // the search text in fenced code blocks, so the search arrives as
+    // "```ts\nconst a = 1;\n```" where the file holds "const a = 1;".
+    //
+    // Stripping the fences would be guessing — the fence lines are not in the file,
+    // and a "helpful" strip that also trimmed a real fence-delimited file would
+    // corrupt it. The failure message tells the model the block was not found, and
+    // one round of feedback is the highest-value intervention in the loop.
+    const r = await applyEdit(
+      req({
+        original: 'const a = 1;\n',
+        edits: [{ search: '```ts\nconst a = 1;\n```', replace: 'const a = 2;' }],
+      }),
+    );
+    expect(r.ok).toBe(false);
+    if (r.ok) return;
+    expect(r.reason).toBe('not-found');
+    expect(r.telemetry.tier).toBe('search-replace');
+  });
+
   it('refuses an over-escaped regex backslash rather than matching it approximately', async () => {
     // Recorded from a live `adze run` against kimi-k3, which doubled the backslash in a
     // regex literal: the file holds /^(\d+)/ and the search asked for /^(\\d+)/.
