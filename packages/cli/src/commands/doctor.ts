@@ -77,6 +77,8 @@ export interface DoctorOptions {
      * on Windows — which is where they will actually be reviewed.
      */
     readonly probe?: HostProbe;
+    /** Overrides the workspace root plugin state is read from. Test-only. */
+    readonly cwd?: string;
   };
 }
 
@@ -632,6 +634,35 @@ function renderDegradations(plan: ContainmentPlan, io: Io, s: Style): void {
   }
 }
 
+function renderPlugins(
+  installed: readonly { readonly id: string; readonly root: string }[],
+  dev: { readonly id: string; readonly root: string } | undefined,
+  io: Io,
+  s: Style,
+): void {
+  io.out(`${s.bold('Plugins')}\n`);
+  if (installed.length === 0 && dev === undefined) {
+    io.out(
+      `  ${s.dim('none installed. `adze plugin add <local-path|git-url>` installs one locally.')}\n\n`,
+    );
+    return;
+  }
+  for (const entry of installed) {
+    const shadowed = dev !== undefined && dev.id === entry.id;
+    io.out(
+      `  ${s.good('installed')} ${entry.id}${shadowed ? ` ${s.warn('(shadowed by dev)')}` : ''}\n`,
+    );
+    io.out(`               ${s.dim(entry.root)}\n`);
+  }
+  if (dev !== undefined) {
+    io.out(`  ${s.warn('dev override')} ${dev.id} from ${dev.root}\n`);
+    io.out(
+      `               ${s.dim('live reload: shadowing the installed same id. Banner also appears in run trajectories.')}\n`,
+    );
+  }
+  io.out('\n');
+}
+
 export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCode> {
   const json = options.json === true;
   const s = styleFor(json);
@@ -639,6 +670,10 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   const shell = await (options.__testHooks?.probeShell ?? probeShell)();
   const checks = await buildChecks(section, shell);
   const probe = options.__testHooks?.probe;
+  const workspaceRoot = options.__testHooks?.cwd ?? process.cwd();
+  const { readDevOverride, readInstalled } = await import('../plugins/store.js');
+  const installed = await readInstalled(workspaceRoot);
+  const dev = await readDevOverride(workspaceRoot);
   // The same call `run` and `chat` make, with the same defaults, so this command reports
   // the boundary a user is actually about to get rather than a second opinion about it.
   const { plan } = await createCliSandbox({
@@ -691,6 +726,10 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
         ...containmentJson(plan),
         reference: 'docs/architecture/adr/0007-sandbox-and-permissions.md',
       },
+      plugins: {
+        installed: installed.map((entry) => ({ id: entry.id, root: entry.root })),
+        dev: dev ?? null,
+      },
     });
     return failed.length > 0 ? EXIT.Failure : EXIT.Ok;
   }
@@ -710,6 +749,7 @@ export async function runDoctor(options: DoctorOptions, io: Io): Promise<ExitCod
   io.out('\n');
 
   renderProviders(section, io, s);
+  renderPlugins(installed, dev, io, s);
   renderSandbox(plan, platform, io);
 
   if (failed.length > 0) {

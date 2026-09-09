@@ -109,6 +109,12 @@ export async function runChat(options: ChatOptions, io: Io): Promise<ExitCode> {
 
   renderBanner(agent, invocation, io, style);
 
+  const dev = await readPluginDev(agent.workspaceRoot);
+  if (dev !== undefined) {
+    io.out(`${style.warn('plugin dev override')} ${dev.id} from ${dev.root}\n`);
+    io.out(`${style.dim('live reload: shadowing the installed same id.')}\n\n`);
+  }
+
   // Measured, not zero. `durationMs: 0` was hardcoded here, so every session reported
   // "wall clock 0.0s" no matter how long it ran — a reported metric that was never a
   // measurement. `run` already threads the clock this way, and the summary renderer is
@@ -169,6 +175,17 @@ function renderBanner(
     io.out(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
   }
   io.out('\n');
+}
+
+async function readPluginDev(
+  workspaceRoot: string,
+): Promise<{ readonly id: string; readonly root: string } | undefined> {
+  try {
+    const { readDevOverride } = await import('../plugins/store.js');
+    return await readDevOverride(workspaceRoot);
+  } catch {
+    return undefined;
+  }
 }
 
 interface ReplContext {

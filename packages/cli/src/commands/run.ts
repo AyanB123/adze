@@ -144,8 +144,9 @@ export async function runRun(
       client: { name: 'adze-cli', version: '0.0.1', platform: process.platform },
     });
 
+    const dev = await readPluginDev(agent.workspaceRoot);
     if (!invocation.json) {
-      renderPreamble(agent, invocation, init.warnings, io, style);
+      renderPreamble(agent, invocation, init.warnings, io, style, dev);
     }
 
     const { sessionId } = await agent.engine.sessionCreate({
@@ -188,8 +189,12 @@ export async function runRun(
 
     // One line, not indented: this goes onto the same stdout stream the renderer has been
     // writing one event per line to, and a consumer parses it line by line.
-    if (invocation.json) writeJsonLine(io, summaryJson(summary));
-    else renderSummary(summary, io, style);
+    if (invocation.json) {
+      writeJsonLine(io, {
+        ...summaryJson(summary),
+        ...(dev === undefined ? {} : { plugins: { dev } }),
+      });
+    } else renderSummary(summary, io, style);
 
     await agent.engine.sessionClose({ sessionId });
     return outcome.stopReason === 'end-turn' ? EXIT.Ok : EXIT.Failure;
@@ -222,10 +227,16 @@ function renderPreamble(
   warnings: readonly Warning[],
   io: Io,
   style: Style,
+  dev: { readonly id: string; readonly root: string } | undefined,
 ): void {
   io.err(
     `${style.dim(`${agent.model.provider}/${agent.model.model} · ${invocation.sandboxMode} · approvals: ${invocation.approvals} · ${containmentLine(agent.containment)}`)}\n`,
   );
+  if (dev !== undefined) {
+    io.err(
+      `${style.warn('plugin dev override')} ${dev.id} from ${dev.root} ${style.dim('(live reload, shadows installed)')}\n`,
+    );
+  }
   for (const gap of degradationLines(agent.containment)) {
     io.err(`${style.warn('not enforced')} ${gap}\n`);
   }
@@ -233,6 +244,17 @@ function renderPreamble(
     io.err(`${style.warn(`warning [${warning.code}]`)} ${warning.message}\n`);
   }
   io.err('\n');
+}
+
+async function readPluginDev(
+  workspaceRoot: string,
+): Promise<{ readonly id: string; readonly root: string } | undefined> {
+  try {
+    const { readDevOverride } = await import('../plugins/store.js');
+    return await readDevOverride(workspaceRoot);
+  } catch {
+    return undefined;
+  }
 }
 
 interface CancelHandle {

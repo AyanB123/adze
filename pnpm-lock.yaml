@@ -171,6 +171,9 @@ importers:
       '@adze/core':
         specifier: workspace:*
         version: link:../core
+      '@adze/plugin-sdk':
+        specifier: workspace:*
+        version: link:../plugin-sdk
       '@adze/protocol':
         specifier: workspace:*
         version: link:../protocol

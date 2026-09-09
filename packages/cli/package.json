@@ -28,6 +28,7 @@
   "dependencies": {
     "@adze/apply": "workspace:*",
     "@adze/core": "workspace:*",
+    "@adze/plugin-sdk": "workspace:*",
     "@adze/protocol": "workspace:*",
     "@adze/providers": "workspace:*",
     "@adze/retrieval": "workspace:*",

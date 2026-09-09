@@ -16,6 +16,18 @@ import { type ApplyOptions, runApply } from './commands/apply.js';
 import { type ChatOptions, runChat } from './commands/chat.js';
 import { type DoctorOptions, runDoctor } from './commands/doctor.js';
 import { type ModelsOptions, runModels } from './commands/models.js';
+import {
+  type PluginAddOptions,
+  type PluginDevOptions,
+  type PluginListOptions,
+  type PluginRemoveOptions,
+  type PluginValidateOptions,
+  runPluginAdd,
+  runPluginDev,
+  runPluginList,
+  runPluginRemove,
+  runPluginValidate,
+} from './commands/plugin.js';
 import { type RunOptions, runRun } from './commands/run.js';
 import { runValidate, type ValidateOptions } from './commands/validate.js';
 import { EXIT, type ExitCode, type Io, processIo } from './output.js';
@@ -210,6 +222,88 @@ export function buildProgram(io: Io, state: RunState): Command {
     )
     .action(async (options: ModelsOptions) => {
       state.exitCode = await runModels(options, io);
+    });
+
+  const plugin = program
+    .command('plugin')
+    .description('local-only plugin management: validate, list, dev, add, remove')
+    .addHelpText(
+      'after',
+      '\nLocal-only: state lives in .adze/plugins/ (gitignored). No registry service.\n' +
+        'Procedural plugins need a WASM runtime (not shipped: wasm refuses loudly) or\n' +
+        'unsandboxed JS via the host opt-in. See docs/plugins/spec.md.\n' +
+        '\nExit codes:\n' +
+        '  0  done\n' +
+        '  1  refused — validation failed, already installed, or not installed\n' +
+        '  2  usage error\n',
+    );
+
+  plugin
+    .command('validate')
+    .description('validate a plugin directory without executing its code')
+    .argument('<path>', 'plugin directory or adze.plugin.json file')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .addHelpText(
+      'after',
+      '\nGates: manifest parses, license allowlisted, engines.adze satisfies the running\n' +
+        'engine, every declared-environment read is checked, tools/paths filters compile,\n' +
+        'referenced files exist and parse, and no command/agent collides with the\n' +
+        'installed set.\n',
+    )
+    .action(async (path: string, options: PluginValidateOptions) => {
+      state.exitCode = await runPluginValidate(path, options, io);
+    });
+
+  plugin
+    .command('list')
+    .description('list installed plugins and the dev override')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .action(async (options: PluginListOptions) => {
+      state.exitCode = await runPluginList(options, io);
+    });
+
+  plugin
+    .command('dev')
+    .description('point a dev override at a live plugin directory (shadows the same id)')
+    .argument('[path]', 'live plugin directory')
+    .option('--clear', 'clear the dev override')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .addHelpText(
+      'after',
+      '\nLive reload: every load reads the override directory. Shown in `adze doctor`\n' +
+        'and run trajectories while active.\n',
+    )
+    .action(async (path: string | undefined, options: PluginDevOptions) => {
+      state.exitCode = await runPluginDev(path, options, io);
+    });
+
+  plugin
+    .command('add')
+    .description('install a plugin from a local path or git URL (shows permissions first)')
+    .argument('<source>', 'local plugin directory or git URL')
+    .option('--yes', 'skip the consent prompt after reviewing permissions')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .addHelpText(
+      'after',
+      '\nShows the plugin id, license, namespace, permissions, and contributions before\n' +
+        'asking for consent. Nothing is executed before consent. Pass --yes in CI.\n',
+    )
+    .action(async (source: string, options: PluginAddOptions) => {
+      state.exitCode = await runPluginAdd(source, options, io);
+    });
+
+  plugin
+    .command('remove')
+    .description('remove an installed plugin by id')
+    .argument('<id>', 'plugin id, e.g. acme.migration-guard')
+    .option('--json', 'machine-readable output')
+    .option('-C, --cwd <path>', 'workspace root (default: the current directory)')
+    .action(async (id: string, options: PluginRemoveOptions) => {
+      state.exitCode = await runPluginRemove(id, options, io);
     });
 
   return program;

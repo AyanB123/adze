@@ -21,6 +21,20 @@ export type { ApplyOptions } from './commands/apply.js';
 export { runApply } from './commands/apply.js';
 export type { DoctorOptions } from './commands/doctor.js';
 export { runDoctor } from './commands/doctor.js';
+export type {
+  PluginAddOptions,
+  PluginDevOptions,
+  PluginListOptions,
+  PluginRemoveOptions,
+  PluginValidateOptions,
+} from './commands/plugin.js';
+export {
+  runPluginAdd,
+  runPluginDev,
+  runPluginList,
+  runPluginRemove,
+  runPluginValidate,
+} from './commands/plugin.js';
 export type { ValidateOptions } from './commands/validate.js';
 export { runValidate } from './commands/validate.js';
 export type { ExitCode, Io, Style } from './output.js';
