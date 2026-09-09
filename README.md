@@ -126,7 +126,7 @@ Two honest qualifications. Validation reports the level that actually ran: with
 tree-sitter grammars present it is a real parse, and without them it is a
 conservative structural balance check that reports itself as `structural` rather
 than implying a parse that did not happen. And the `apply-bench` suite that runs
-today passes 50/50 cases against **hand-written** edits — it measures the
+today passes all its cases (`pnpm bench:list` prints the live count) against **hand-written** edits — it measures the
 applier, not any model, and we do not describe its number as a model result.
 
 ### 4. A plugin surface that can actually express a workflow

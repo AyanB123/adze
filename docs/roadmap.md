@@ -76,8 +76,9 @@ recorded here rather than left to be discovered.
    write outside the roots and requires it to be blocked — but those tests skip
    on Windows, which is the platform this verification ran on. They run in CI on
    the macOS and Ubuntu runners.
-2. **No benchmark result has been published.** `apply-bench` runs and passes its
-   50 cases, but that suite measures the applier against hand-written edits. It
+2. **No benchmark result has been published.** `apply-bench` runs and passes
+   (`pnpm bench:list` prints the live case count), but that suite measures the
+   applier against hand-written edits. It
    is not a measurement of any model, and its number is not a published result.
    Nothing has been run against SWE-rebench or Terminal-Bench. Of the two
    publication gates, the citation rule now runs on every generated report — a
@@ -182,7 +183,7 @@ containment is possible.
 | `@adze/retrieval` | ✅ Landed | ripgrep + tree-sitter symbols + RRF fusion. Vectors deferred. |
 | `@adze/sandbox` | ✅ Landed, Windows excepted | Seatbelt, bubblewrap, opt-in Docker report `os-level`. Windows reports `gate-only` and confines nothing. Syscall surface unrestricted everywhere. |
 | `@adze/cli` | ✅ Landed | `run`, `chat`, `apply`, `validate`, `doctor`, `models` |
-| `bench/suites/apply-bench` | ✅ Landed | 51/51 cases pass; wired into CI |
+| `bench/suites/apply-bench` | ✅ Landed | All cases pass (`pnpm bench:list` prints the live count); wired into CI |
 
 **Done when:** the CLI completes a multi-step task in a real repository, every
 tool call passes the gate, and `apply-bench` runs on every PR.
@@ -289,7 +290,8 @@ merge bot has tracked upstream for four consecutive weekly releases unattended.
 
 Runs in parallel with M1–M2, not after.
 
-Tier 1 is live: `apply-bench` runs on every pull request, passes 51/51 cases, and
+Tier 1 is live: `apply-bench` runs on every pull request, passes all its cases
+(`pnpm bench:list` prints the live count), and
 uploads its run directory as an artifact. It is deterministic and free — no model
 calls, no network, no container — which is also the limit of what exists. Nothing
 containerized has been built.
