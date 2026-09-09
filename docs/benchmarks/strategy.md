@@ -72,7 +72,7 @@ tokens` is a headline metric rather than a footnote.
 
 | Eval | Size | Purpose |
 | --- | --- | --- |
-| `apply-bench` | 51 hand-written edits (`pnpm bench:list` prints the count) | Highest-frequency regression class. Deterministic, near-free. |
+| `apply-bench` | 54 hand-written edits (`pnpm bench:list` prints the count) | Highest-frequency regression class. Deterministic, near-free. |
 | Aider Polyglot subset | 40 of 225 | Cheapest edit-format signal. Reports `% well formed` **and** pass rate. |
 | SWE-bench smoke slice | fixed 25 | **Wiring check. This number is never published.** |
 | **Leakage assertions** | — | See below. Build failures, not warnings. |

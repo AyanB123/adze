@@ -290,20 +290,27 @@ merge bot has tracked upstream for four consecutive weekly releases unattended.
 
 Runs in parallel with M1–M2, not after.
 
-Tier 1 is live: `apply-bench` runs on every pull request, passes all its cases
-(`pnpm bench:list` prints the live count), and
-uploads its run directory as an artifact. It is deterministic and free — no model
-calls, no network, no container — which is also the limit of what exists. Nothing
-containerized has been built.
+Tier 1 is live: four suites run on every pull request, each deterministic and
+free — no model calls, no network, no container — and each uploads its run
+directory as an artifact:
+
+| Suite | Command | What it measures |
+| --- | --- | --- |
+| `apply-bench` | `pnpm bench:apply` | Applier against hand-written edits (`pnpm bench:list` prints the live count). |
+| `polyglot-bench` | `pnpm bench:polyglot` | Edit format, 40-case subset sampling the 225-task Aider Polyglot shape; reports `% well formed` and pass rate, both synthetic. |
+| `index-bench` | `pnpm bench:index` | Local retrieval at small scale (ripgrep latency, cold/incremental timing, precision@k) with machine, digest, and resource band recorded. |
+| `swe-smoke` | `pnpm bench:swe-smoke` | Wiring check only: 25 placeholders prove the pipeline works, and the report is refused publication by design (exit 3). |
+
+Nothing containerized has been built, which is also the limit of what exists.
 
 | Deliverable | State | Notes |
 | --- | --- | --- |
-| `bench/harness` | 🚧 Partly landed | Tier-1 runner, case schema, statistics, report rendering, the publication gate, and the payload and history leakage assertions landed (116 tests). Harbor adapters are **not** built. |
+| `bench/harness` | 🚧 Partly landed | Tier-1 runners (edit suites plus local retrieval), case schemas, statistics, report rendering, the publication gate including the swe-smoke wiring-check refusal, and the payload and history leakage assertions landed. Harbor adapters are **not** built. |
 | Two-container isolation | ⬜ Not started | No container code exists anywhere in `bench/`. |
 | Leakage assertions | 🚧 Partly landed | Gold-patch-field, test-patch and future-history absence are asserted today by `checkPromptLeakage` and `checkHistoryIsolation`, as ordinary tests, so they are build failures on all three operating systems. The field guard is default-deny, so a dataset that adds a solution-bearing column is refused rather than passed. Network isolation and diff-only grading are **not implemented**: they are properties of a container, and the containers belong to Harbor. |
-| Tier 1 / 2 / 3 pipelines | 🚧 Tier 1 only | Tiers 2 and 3 need the container work above. |
+| Tier 1 / 2 / 3 pipelines | 🚧 Tier 1 only | Tier 1 is four suites (see above). Tiers 2 and 3 need the container work above. |
 | Report format | 🚧 Partly landed | `report.md` genuinely emits limitations first, and that is reachable and tested: the limitations section is index 0, and a test compares its position against the first percentage in the rendered output. So it is a property of the generator rather than of the author. |
-| Publication gates | 🚧 Partly enforced | `checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be rendered without passing through it, and `adze-bench` exits 3 on a violation. A violating run is still written in full, because trajectories are required evidence and destroying them to hide a policy failure would be worse — the violation is printed into the report above every number instead. **Enforced:** report integrity (a headline that disagrees with the case outcomes; a severe-failure list that hides a case which applied when a refusal was required), the deterministic-versus-stochastic distinction (a non-deterministic suite reporting fewer than three attempts is refused), model-pin honesty, and that a report can cite its own run. **Not enforced:** the three-point comparison rule and the max-over-N detector — implemented and tested, but a Tier-1 report has no baseline and runs each case once, so calling them would evaluate absent data and look like enforcement while being none. They activate with the first report carrying a baseline or per-attempt rates. |
+| Publication gates | 🚧 Partly enforced | `checkReportPolicy` runs inside `renderReportMarkdown`, so a report cannot be rendered without passing through it, and `adze-bench` exits 3 on a violation. A violating run is still written in full, because trajectories are required evidence and destroying them to hide a policy failure would be worse — the violation is printed into the report above every number instead. **Enforced:** report integrity (a headline that disagrees with the case outcomes; a severe-failure list that hides a case which applied when a refusal was required), the deterministic-versus-stochastic distinction (a non-deterministic suite reporting fewer than three attempts is refused), model-pin honesty, the swe-smoke wiring-check refusal (every `swe-smoke` report carries `wiring-check-not-publishable`, so its number cannot be quoted), and that a report can cite its own run. **Not enforced:** the three-point comparison rule and the max-over-N detector — implemented and tested, but a Tier-1 report has no baseline and runs each case once, so calling them would evaluate absent data and look like enforcement while being none. They activate with the first report carrying a baseline or per-attempt rates. |
 | First public report | ⬜ Not started | Whatever the number is. Including if it is bad. |
 
 **Done when:** a stranger can re-run a published number from the artifacts alone.

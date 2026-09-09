@@ -160,9 +160,12 @@ jobs:
       - run: pnpm licenses:check
       - run: pnpm gallery:audit
 
-  # Tier-1 gate eval per ADR-0011: deterministic, no model calls, no cost. The
-  # policy is that evaluation runs from the first pull request rather than being
-  # added once there is a number worth rationalizing.
+  # Tier-1 gate evals per ADR-0011: deterministic, no model calls, no container,
+  # no cost. The policy is that evaluation runs from the first pull request
+  # rather than being added once there is a number worth rationalizing. Every
+  # suite below is smoke-sized: apply-bench (applier), polyglot-bench (edit
+  # format, 40 of 225), index-bench (local retrieval at small scale), and
+  # swe-smoke (wiring check whose report is refused publication by design).
   gate-evals:
     name: gate evals
     runs-on: ubuntu-latest
@@ -178,11 +181,31 @@ jobs:
       - name: apply-bench
         run: pnpm bench:apply
 
-      - name: upload apply-bench report
+      - name: polyglot-bench
+        run: pnpm bench:polyglot
+
+      - name: index-bench
+        run: pnpm bench:index
+
+      # Exit 3 IS the passing condition here: the cases must pass and the report
+      # must be refused as wiring-check-not-publishable. A 0 would mean the
+      # refusal broke and the wiring number became quotable.
+      - name: swe-smoke wiring check
+        run: |
+          set +e
+          pnpm bench:swe-smoke
+          code=$?
+          set -e
+          if [ "$code" -ne 3 ]; then
+            echo "expected swe-smoke to exit 3 (wiring-check-not-publishable), got $code"
+            exit 1
+          fi
+
+      - name: upload Tier-1 reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: apply-bench-report
+          name: tier-1-reports
           path: bench/.runs/
           # `.runs` is a dotted directory, and upload-artifact treats a leading
           # dot as hidden and skips it by default. Without this the step found
