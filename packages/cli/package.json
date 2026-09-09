@@ -35,7 +35,8 @@
     "@adze/retrieval": "workspace:*",
     "@adze/sandbox": "workspace:*",
     "commander": "catalog:",
-    "picocolors": "catalog:"
+    "picocolors": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
