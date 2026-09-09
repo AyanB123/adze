@@ -36,11 +36,17 @@ my-plugin/
     └── policy.wasm       # compiled from Rust/Go/Zig/TinyGo → wasm32-wasip2
 ```
 
-Install: `adze plugin add <npm-package | git-url | ./local-path>` — **not built.**
-Develop: `adze plugin dev ./my-plugin` — **not built.** There is no `plugin`
-subcommand; both are milestone M3 deliverables ([roadmap](../../docs/roadmap.md)).
-What works today is loading plugins **programmatically** through
-`@adze/plugin-sdk`:
+Install: `adze plugin add <local-path | git-url>` — local-only, no registry
+service. The command shows the plugin's id, license, namespace, permissions,
+and contributions, then asks for consent before recording anything; pass
+`--yes` in CI. State lives in `.adze/plugins/` (gitignored).
+Develop: `adze plugin dev ./my-plugin` — points a live override at the
+directory, shadowing the installed entry with the same id. Every load reads the
+directory, and the override is bannered in `adze doctor` and run trajectories
+while active. `adze plugin list` shows the set, `adze plugin remove <id>`
+removes one, and `adze plugin validate <path>` runs every static gate without
+executing plugin code. What also works is loading plugins **programmatically**
+through `@adze/plugin-sdk`:
 
 ```ts
 import { jsModuleRuntime, loadPlugins } from '@adze/plugin-sdk';
@@ -165,11 +171,15 @@ fn provide_context(query: &str) -> Vec<Chunk> {
 }
 ```
 
-Context-provider triggers are the only contribution kind currently checked for
-collisions across plugins: two plugins claiming `@docs` load, the first one wins,
-and the loser is reported. Slash-command and subagent names are not checked —
-two plugins can each contribute `review` and which one `/review` invokes depends
-on load order.
+Context-provider triggers are checked for collisions across plugins by the
+single funnel every provider passes through (`buildContextProviders`): two
+plugins claiming `@docs` load, the first one wins, and the loser is reported.
+Slash-command and subagent names are checked the same way, by the command and
+agent registries (`buildCommandRegistry`, `buildAgentRegistry`) every surface
+assembles from: two plugins contributing `review` load, the first one wins, and
+the later entry is refused with a diagnostic rather than silently shadowed.
+`adze plugin validate` reports the collision an install would create before
+anything is installed.
 
 ## Surface 3 — Slash commands
 
@@ -211,9 +221,18 @@ forking.
 
 ```jsonc
 "hooks": [
-  { "event": "edit.pre", "module": "hooks/policy.wasm", "runtime": "wasm", "timeoutMs": 500 }
+  { "event": "edit.pre", "module": "hooks/policy.wasm", "runtime": "wasm", "timeoutMs": 500 },
+  // Scoped to what the hook polices: the host applies these before dispatching
+  // to the guest, so the hook never runs for calls it would ignore.
+  { "event": "tool.pre", "module": "hooks/bash-guard.mjs", "runtime": "js", "tools": ["bash"], "paths": ["infra/**/*.yml"], "timeoutMs": 500 }
 ]
 ```
+
+`tools` matches the tool name (`tool.pre`/`tool.post`, or the originating tool
+for derived `edit.pre`/`edit.post`); `paths` matches the edit path with the same
+glob syntax as context providers. Both lists are OR within and AND across: a
+hook with both fires only when both match. An invalid glob is a load error, and
+a skipped dispatch is recorded as `skipped` rather than silently dropped.
 
 `runtime` is `"wasm"`, `"js"`, or `"native"`. It may be omitted when the module
 extension says how to run it: `.wasm` infers `wasm`, `.js`/`.mjs` infers `js`.
@@ -282,11 +301,13 @@ Hooks are in the hot path, so `timeoutMs` is enforced. A hook that times out is
 treated as `allow` and logged loudly — failing closed on a slow hook would make
 the agent unusable, and failing silently would hide a broken policy. A host that
 would rather stop the agent passes `onFailure: 'deny'` to the `HookHost`; the
-SDK refuses to make that choice on its behalf. Hook events cannot be scoped to a
-tool, so every hook runs on every call of its event — open with
-`if (input.name !== 'bash') return { kind: 'allow' };` and expect the cost to
-grow linearly with installed policy plugins. `tool.pre` fires for every tool
-call and additionally derives `edit.pre` for edit-shaped tools, so a plugin
+SDK refuses to make that choice on its behalf. A hook entry may scope itself
+with `tools` and `paths` filters, which the host applies before guest dispatch —
+prefer `tools: ["bash"]` over opening with
+`if (input.name !== 'bash') return { kind: 'allow' };`, so the guest is never
+entered for calls the hook would ignore. An unscoped hook runs on every call of
+its event, and the cost grows linearly with installed policy plugins. `tool.pre`
+fires for every tool call and additionally derives `edit.pre` for edit-shaped tools, so a plugin
 registering both is invoked twice per edit; the events compose rather than
 alternate.
 

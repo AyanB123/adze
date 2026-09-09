@@ -242,7 +242,7 @@ not exist, and the exit criterion is about other people, not about us.
 | Hooks (surface 4) | ✅ Landed | Lifecycle events with `allow` / `deny` / `modify`. **The one that makes policy a community problem instead of a roadmap item.** |
 | Subagents (surface 5) | ✅ Landed | Declarative prompt, tool allowlist, model preference |
 | WASM host | ⬜ **Not started** | `wasm32-wasip2` is a seam, not a runtime. The default `unavailableWasmRuntime` **fails the load** rather than skipping the module, because a policy hook that quietly never runs looks like a working policy and is not. What actually executes procedural plugin code today is a local ES module runtime. |
-| `@adze/plugin-sdk` | 🚧 Partly landed | Manifest schema and authoring types landed. `adze plugin dev` with local override is **not built** — there is no `plugin` subcommand. |
+| `@adze/plugin-sdk` | ✅ Landed | Manifest schema, authoring types, `adze plugin` local management (`validate`, `list`, `dev` with local override, `add`, `remove`), command/agent registries, host-side hook filters |
 | 5+ first-party plugins | ✅ Landed, 8 of them | Written to find out what the spec got wrong — and it did. See `plugins/FINDINGS.md`. |
 
 The plugins were built to stress the spec, and the most serious thing they found

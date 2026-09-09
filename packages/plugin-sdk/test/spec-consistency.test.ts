@@ -69,11 +69,20 @@ describe('the spec documents a plugin that can actually load', () => {
     expect(text).toContain('module-unloadable');
   });
 
-  it('marks adze plugin add/dev as not built rather than advertising them', () => {
+  it('documents adze plugin add/dev as built local-only commands', () => {
     const text = spec();
-    expect(text).toContain('adze plugin dev');
-    expect(text).toMatch(/not built/i);
-    // The programmatic path is the one that works; the spec must say so.
+    for (const command of [
+      'adze plugin add',
+      'adze plugin dev',
+      'adze plugin list',
+      'adze plugin remove',
+      'adze plugin validate',
+    ]) {
+      expect(text).toContain(command);
+    }
+    // Local-only: state in .adze/plugins/, no registry service.
+    expect(text).toContain('.adze/plugins/');
+    // The programmatic path is still documented alongside the CLI.
     expect(text).toContain('loadPlugins');
   });
 
@@ -127,10 +136,11 @@ describe('the guide teaches the fixed edit.pre pattern', () => {
   });
 });
 
-describe('the plugin directory does not advertise a command that does not exist', () => {
-  it('plugins/README.md states the command is missing', () => {
+describe('the plugin directory documents the command that exists', () => {
+  it('plugins/README.md shows adze plugin usage, not a missing command', () => {
     const text = pluginsReadme();
-    expect(text).not.toMatch(/```bash\nadze plugin dev/);
-    expect(text).toContain('does not exist');
+    expect(text).toContain('adze plugin add');
+    expect(text).toContain('adze plugin dev');
+    expect(text).not.toContain('does not exist');
   });
 });

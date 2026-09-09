@@ -145,9 +145,10 @@ lets a team encode policy without waiting for us to build a policy feature.
 **Surfaces 1–5 are built; the WASM host is not.** `@adze/plugin-sdk` carries the
 manifest schema, authoring types, and the tools, context-provider, slash-command,
 hook, and subagent surfaces, exercised by eight first-party plugins (see
-`plugins/FINDINGS.md` for what building them taught us). Two gaps remain: the
+`plugins/FINDINGS.md` for what building them taught us). One gap remains: the
 WASM host is a seam rather than a runtime — procedural plugin code executes as
-local ES modules today — and `adze plugin dev` does not exist. The six surfaces
+local ES modules today. Local plugin management is built: `adze plugin`
+(`validate`, `list`, `dev`, `add`, `remove`) with state in `.adze/plugins/`. The six surfaces
 are specified in the [written specification](docs/plugins/spec.md), which comes
 first on purpose — the extension points are not validated until real plugins hit
 a wall.

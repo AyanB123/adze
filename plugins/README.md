@@ -38,10 +38,25 @@ most needs.
 
 ## Installing one
 
-There is no `adze plugin` command yet — `adze plugin dev
-./plugins/adze-secrets-guard` does not exist (exit code `2`, unknown command).
-It is a milestone M3 deliverable. What works today is loading plugins
-**programmatically** through `@adze/plugin-sdk`; see
+`adze plugin` manages local plugins — no registry service (see ADR-0008 on why
+the service waits for ~20 third-party plugins):
+
+```console
+$ adze plugin validate ./plugins/adze-secrets-guard
+valid adze.secrets-guard (...)
+
+$ adze plugin add ./plugins/adze-secrets-guard
+# shows id, license, namespace, permissions, contributions, then asks consent
+installed adze.secrets-guard from ./plugins/adze-secrets-guard
+
+$ adze plugin dev ./plugins/adze-secrets-guard   # live override, shadows the id
+$ adze plugin list                               # installed set + dev override
+$ adze plugin remove adze.secrets-guard
+```
+
+State lives in `.adze/plugins/` (local-only, gitignored). `add` accepts a local
+path or a git URL and executes nothing before consent. What also works is
+loading plugins **programmatically** through `@adze/plugin-sdk`; see
 [docs/guides/plugins.md](../docs/guides/plugins.md) for the worked script,
 verified against all eight first-party plugins.
 

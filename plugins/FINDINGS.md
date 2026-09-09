@@ -112,6 +112,19 @@ load, and it would let the host skip the guest call entirely. There is no such f
 every edit for three of them, and a latency profile that gets worse linearly with the
 number of installed policy plugins.
 
+### Resolution
+
+The suggested fix was taken. `contributes.hooks[]` entries may carry `tools` and
+`paths` filters, compiled with the same glob syntax as context-provider patterns.
+The host applies them before guest dispatch — `tools` against the tool name (the
+originating tool for derived `edit.pre`/`edit.post`), `paths` against the edit
+path, OR within each list and AND across the two — an invalid glob is a load
+error, and a skipped dispatch is recorded as a `skipped` hook record rather than
+silently dropped. The double invocation of `tool.pre` + `edit.pre` for one edit
+remains: the two events compose rather than alternate, and the spec documents
+that. The report above is kept because the guard clauses in the four first-party
+plugins are still the correct backstop for hosts that never upgraded.
+
 ---
 
 ## 3. The spec gives no entry shape for four of the six surfaces
@@ -200,6 +213,18 @@ returns them per plugin and nothing merges them — so there is no place the che
 naturally live. That is the actual defect: the SDK has no registry for commands and
 agents, so a surface assembling them has to dedupe for itself and none of them will do it
 the same way.
+
+### Resolution
+
+The funnel now exists: `buildCommandRegistry` and `buildAgentRegistry` in
+`packages/plugin-sdk/src/registry.ts` merge every loaded plugin's commands and
+agents the way `buildContextProviders` merges providers. The first loaded entry
+wins and the later one is refused with a `duplicate-name` diagnostic — an error
+rather than the trigger path's warning, because a shadowed command is an
+unreachable entry point rather than degraded context. Surfaces assemble from the
+registries, and `adze plugin validate` reports the collision before install. The
+report above is kept because `adze.review`'s `review-diff` naming is still the
+convention that avoided the collision while no check existed.
 
 ---
 

@@ -77,9 +77,10 @@ discovered later.
   table.
 - **The VS Code extension and MCP support are in progress and not usable yet.**
   Milestone M2.
-- **Plugins cannot be installed from the CLI.** Eight first-party plugins exist and
-  load through `@adze/plugin-sdk` programmatically, but `adze plugin dev` — the
-  command `plugins/README.md` shows — is not implemented. See
+- **Plugins install from the CLI, locally only.** Eight first-party plugins exist;
+  `adze plugin add <local-path | git-url>` shows permissions and asks for consent,
+  and `validate`, `list`, `dev`, and `remove` manage the local set in
+  `.adze/plugins/`. Programmatic loading through `@adze/plugin-sdk` also works. See
   [plugins.md](plugins.md). Milestone M3.
 
 ## Requirements

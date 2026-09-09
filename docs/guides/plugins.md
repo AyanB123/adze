@@ -8,23 +8,19 @@ own. The full six-surface reference is [docs/plugins/spec.md](../plugins/spec.md
 reasoning is [ADR-0008](../architecture/adr/0008-plugin-architecture.md).
 
 > [!IMPORTANT]
-> **There is no way to install a plugin from the CLI.** `plugins/README.md` shows
-> `adze plugin dev ./plugins/adze-secrets-guard`, and that command does not exist:
+> **Local plugin management lives in the CLI.** `adze plugin validate <path>`
+> runs every static gate without executing plugin code,
+> `adze plugin add <local-path | git-url>` shows the plugin's permissions and
+> asks for consent before recording it in `.adze/plugins/` (local-only,
+> gitignored), `adze plugin list` shows the set, `adze plugin dev <path>`
+> points a live override at a directory while active (bannered in `adze doctor`
+> and run trajectories), and `adze plugin remove <id>` removes one.
 >
-> ```console
-> $ node packages/cli/bin/adze.mjs plugin dev ./plugins/adze-secrets-guard
-> error: unknown command 'plugin'
-> (add --help for usage)
-> ```
->
-> Exit code `2`. `adze plugin dev` is a milestone M3 deliverable in
-> [the roadmap](../roadmap.md), listed under `@adze/plugin-sdk` alongside "manifest
-> schema, authoring types, `adze plugin dev` with local override".
->
-> What works today is loading plugins **programmatically** through
+> What also works is loading plugins **programmatically** through
 > `@adze/plugin-sdk`, which is shown below and was verified against all eight
-> first-party plugins. If you are writing a plugin, that is your test harness. If you
-> want to *use* a plugin from the `adze` command, wait for M3.
+> first-party plugins. If you are writing a plugin, `validate` is your first
+> harness and the script below is your second. If you are embedding the engine,
+> the programmatic path is your only one.
 
 ## What is actually in `plugins/`
 
@@ -71,8 +67,10 @@ It records nine places where the spec or the SDK turned out to be wrong, ambiguo
 insufficient, found by building these eight. ADR-0008 published the spec before the
 implementation for exactly that purpose. Two findings will affect you directly:
 a content policy on `edit.pre` must read `content` as well as `edits[].replace`
-(whole-file bytes live in `content`, or the guard has a hole), and hook events
-cannot be scoped to a tool, so every hook runs on every call.
+(whole-file bytes live in `content`, or the guard has a hole), and an unscoped
+hook runs on every call of its event — so scope yours with `tools`/`paths`
+filters (findings 2 and 5 in `FINDINGS.md` are fixed; the reports are kept with
+their resolutions recorded).
 
 ## Loading a plugin today
 
@@ -255,9 +253,10 @@ This is all of `adze-adr-context`, which needs no code:
 ```
 
 A `glob` context provider needs a `trigger`, a pattern list, and a `maxBytes` ceiling.
-Context-provider triggers are the **only** contribution kind currently checked for
-collisions between plugins — finding 5 in `FINDINGS.md` — so two plugins claiming the
-same slash command will not be caught for you.
+Duplicate `@`-triggers, slash-command names, and subagent names across plugins are
+all refused for the later entry — the first loaded wins — by the provider,
+command, and agent registries every surface assembles from, and
+`adze plugin validate` reports the collision before anything is installed.
 
 A slash command is a markdown file referenced by path. `adze-test-first` contributes
 three of them and contains no code either.
@@ -274,6 +273,12 @@ Declare the event, the module, the runtime, and a timeout:
   ]
 }
 ```
+
+Scope a hook to what it polices with `tools` (tool names) and `paths` (edit-path
+globs, same syntax as context-provider patterns): the host applies them before
+guest dispatch, an invalid glob is a load error, and a skipped dispatch is
+recorded rather than silently dropped. A hook that only cares about `bash`
+declares `tools: ["bash"]` instead of opening with a guard clause.
 
 Registering both events for one guard is not redundancy, but the reason changed
 when `edit.pre` learned to see whole-file content. `edit.pre` carries `path`,

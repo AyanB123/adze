@@ -29,12 +29,17 @@ this build**, and the plugin containing it refuses to load rather than loading w
 it. Refusing is deliberate — a policy hook that silently does not run leaves a team
 believing their rule is enforced.
 
-## Nothing consumes this package yet
+## Who consumes this package
 
-No surface imports it, and there is no `adze plugin add` or `adze plugin dev` command.
-Wiring belongs in a surface, not here: `packages/cli` already depends on `@adze/core`
-and is the layer permitted to know about every service package at once. Until that
-exists, plugins load only when a host calls `loadPlugins` itself.
+`packages/cli` wires it for local plugin management: `adze plugin validate`
+runs the static gates, `add`/`list`/`dev`/`remove` keep the local set in
+`.adze/plugins/`, and `doctor` banners an active dev override. Surfaces
+assemble duplicate-checked commands, agents, and providers from
+`buildCommandRegistry`, `buildAgentRegistry`, and `buildContextProviders`, and
+hook `tools`/`paths` filters are enforced host-side before guest dispatch.
+Until a surface passes its workspace's plugin directories to `loadPlugins`,
+plugins load only when a host calls it itself — as the worked script in
+`docs/guides/plugins.md` does.
 
 ## Using it
 

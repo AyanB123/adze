@@ -8,7 +8,7 @@ This document describes how Adze is put together and why. It is the map; the
 > yet.** The protocol, engine, applier, provider gateway, retrieval, CLI,
 > embedding SDK, plugin SDK, MCP client and server, and the VS Code extension are
 > committed and their suites pass (2,003 tests; the extension is landed but
-> unpublished). Not built: the WASM plugin host, `adze plugin dev`, and every
+> unpublished). Not built: the WASM plugin host and every
 > surface beyond the CLI and the extension.
 > Sections below flag the gap where it exists, and [the roadmap](../roadmap.md)
 > carries the authoritative per-package status — where this document and the
@@ -424,8 +424,8 @@ host. `wasm32-wasip2` is a seam, not a runtime: the default
 `unavailableWasmRuntime` **fails the load** rather than skipping the module,
 because a policy hook that quietly never runs looks like a working policy and is
 not. What actually executes procedural plugin code today is a local ES module
-runtime. `adze plugin dev` with local override is likewise **not built** — there
-is no `plugin` subcommand. The hook arrows in the §5 turn diagram describe the
+runtime. `adze plugin` manages local plugins (`validate`, `list`, `dev` with
+local override, `add`, `remove`; state in `.adze/plugins/`). The hook arrows in the §5 turn diagram describe the
 intended flow with one exception now running: the hook bus itself fires on every
 turn, and only the WASM-isolation box around it is still intent rather than
 implementation.
