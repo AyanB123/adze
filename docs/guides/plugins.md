@@ -70,8 +70,9 @@ architecture invariant being demonstrated rather than a limitation.
 It records nine places where the spec or the SDK turned out to be wrong, ambiguous, or
 insufficient, found by building these eight. ADR-0008 published the spec before the
 implementation for exactly that purpose. Two findings will affect you directly:
-`edit.pre` cannot see the content of a whole-file write, and hook events cannot be
-scoped to a tool, so every hook runs on every call.
+a content policy on `edit.pre` must read `content` as well as `edits[].replace`
+(whole-file bytes live in `content`, or the guard has a hole), and hook events
+cannot be scoped to a tool, so every hook runs on every call.
 
 ## Loading a plugin today
 
@@ -274,17 +275,28 @@ Declare the event, the module, the runtime, and a timeout:
 }
 ```
 
-Registering both events for one guard is not redundancy. `edit.pre` carries
-`edits: [{ search, replace }]`, which is everything for the `edit` tool and **nothing
-for the `write` tool** — a whole-file write arrives as
-`{ path, edits: [], wholeFile: true }`, so the bytes being written are not in the
-payload at all. A guard that only registered `edit.pre` would block a credential added
-by `edit` and wave through the same credential written by `write`, which is the worse
-of the two because `write` replaces the whole file. The credential check therefore runs
-on `tool.pre`, where `arguments.content` is a declared field, and that also covers
-`bash` — `echo <key> > .env` leaks a credential without touching an edit tool.
-Meanwhile `edit.pre` keeps the two things only it can do: the search/replace blocks,
-and any rule needing `approvedByHuman`, a field `tool.pre` does not have.
+Registering both events for one guard is not redundancy, but the reason changed
+when `edit.pre` learned to see whole-file content. `edit.pre` carries `path`,
+`edits: [{ search, replace }]`, `wholeFile`, and — when `wholeFile` is true —
+`content`: the bytes a whole-file write would leave on disk. That covers all
+three shapes an edit arrives in: a search/replace `edit` (`edits` populated),
+a whole-file `write` (`content` set, `edits` empty), and an `edit` carrying a
+whole-file `replacement` (`content` set). **A content policy must read `content`
+as well as `edits[].replace`.** Reading only `edits` produces the bypass
+`plugins/FINDINGS.md` records: a guard that refuses a credential added by `edit`
+and allows the identical credential written by `write`. Prefer these
+tool-agnostic fields over `arguments`; `arguments` is declared and safe to use,
+but reading tool-specific argument names couples the policy to which tool
+produced the edit — the coupling `edit.pre` exists to remove.
+
+The credential check therefore lives on `edit.pre` through the payload, and it
+is *also* checked on `tool.pre` as a deliberate backstop: a host can remap which
+tools derive `edit.pre`, and for a credential guard a redundant denial costs
+nothing while a missed one costs everything. `tool.pre` additionally covers the
+one thing no edit event can: `bash` — `echo <key> > .env` leaks a credential
+without touching an edit tool. Meanwhile `edit.pre` keeps the one thing only it
+can do: any rule needing `approvedByHuman`, a field `tool.pre` does not have
+(which is why the CI-workflow rule stays on `edit.pre` alone).
 
 The module exports a handler that receives the payload and returns a decision. Read
 `plugins/adze-secrets-guard/hooks/guard.mjs` top to bottom; its header comment
