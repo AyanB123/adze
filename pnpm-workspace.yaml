@@ -28,11 +28,11 @@ catalog:
   "@ai-sdk/openai-compatible": ^3.0.40
   "@modelcontextprotocol/sdk": ^1.30.0
   "@vscode/ripgrep": ^1.18.0
-  web-tree-sitter: ^0.26.13
+  web-tree-sitter: ^0.27.0
   commander: ^15.0.0
   picocolors: ^1.1.1
   picomatch: ^4.0.7
-  yaml: ^2.9.0
+  yaml: ^2.9.1
   jsonc-parser: ^3.3.1
 
   # --- Dev ---
@@ -49,7 +49,7 @@ catalog:
   # Note: `ovsx` is deliberately absent: it is EPL-2.0, which this repo forbids.
   # Publishing to Open VSX invokes it through `pnpm dlx`, so it never enters the
   # dependency graph. See apps/vscode/README.md.
-  "@vscode/vsce": ^3.9.2
+  "@vscode/vsce": ^4.0.0
 
 # Only these packages may run install scripts. Anything else is denied by
 # default: a postinstall script is the cheapest supply-chain attack there is,
